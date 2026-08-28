@@ -74,7 +74,7 @@ export function tickMonster(
 
   if (m.behindWalker) {
     m.behindTimer -= dt;
-    const bx = walker.x - Math.sin(walker.yaw) * 1.85;
+    const bx = walker.x + Math.sin(walker.yaw) * 1.85;
     const bz = walker.z + Math.cos(walker.yaw) * 1.85;
     m.position.x = bx;
     m.position.z = bz;

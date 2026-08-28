@@ -122,7 +122,7 @@ export class GameSession {
     const spawn = getRoomById("entrance")!;
     this.walker = {
       position: { x: spawn.cx, y: 1.6, z: spawn.cz },
-      yaw: Math.PI / 2,
+      yaw: -Math.PI / 2,
       pitch: 0,
       stamina: MAX_STAMINA,
       health: 100,
@@ -134,7 +134,7 @@ export class GameSession {
     };
     this.watcher = {
       position: { x: spawn.cx, y: 2.4, z: spawn.cz + 1.2 },
-      yaw: Math.PI / 2,
+      yaw: -Math.PI / 2,
       pitch: -0.2,
       energy: MAX_ENERGY,
       mode: "normal",

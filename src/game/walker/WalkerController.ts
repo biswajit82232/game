@@ -120,7 +120,7 @@ export class WalkerController {
   stepLook(dt: number): void {
     if (this.lookAxis.x === 0 && this.lookAxis.y === 0) return;
     const rate = 920;
-    this.applyLook(this.lookAxis.x * rate * dt, this.lookAxis.y * rate * dt);
+    this.applyLook(this.lookAxis.x * rate * dt, -this.lookAxis.y * rate * dt);
   }
 
   step(dt: number, role: Role, stamina: number, extraWalls: WallSeg[] = []): { sprinting: boolean; moving: boolean } {
@@ -138,8 +138,8 @@ export class WalkerController {
       fwd /= len;
       strafe /= len;
     }
-    const dx = Math.sin(this.yaw) * fwd + Math.cos(this.yaw) * strafe;
-    const dz = -Math.cos(this.yaw) * fwd + Math.sin(this.yaw) * strafe;
+    const dx = -Math.sin(this.yaw) * fwd + Math.cos(this.yaw) * strafe;
+    const dz = -Math.cos(this.yaw) * fwd - Math.sin(this.yaw) * strafe;
     const wishX = dx * speed * dt;
     const wishZ = dz * speed * dt;
     if (role === "walker") {
