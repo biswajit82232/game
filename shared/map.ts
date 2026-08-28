@@ -75,21 +75,84 @@ export function getRoomAt(x: number, z: number): RoomBox | undefined {
   );
 }
 
+/** Door threshold on `room`'s wall that faces `other`. */
+export function doorOnRoom(room: RoomBox, other: RoomBox): { x: number; z: number } {
+  const dx = other.cx - room.cx;
+  const dz = other.cz - room.cz;
+  if (Math.abs(dx) > Math.abs(dz)) {
+    return {
+      x: dx > 0 ? room.cx + room.hw : room.cx - room.hw,
+      z: (Math.max(room.cz - room.hd, other.cz - other.hd) + Math.min(room.cz + room.hd, other.cz + other.hd)) / 2,
+    };
+  }
+  return {
+    z: dz > 0 ? room.cz + room.hd : room.cz - room.hd,
+    x: (Math.max(room.cx - room.hw, other.cx - other.hw) + Math.min(room.cx + room.hw, other.cx + other.hw)) / 2,
+  };
+}
+
 export function doorwayCenter(def: DoorwayDef): { x: number; z: number; yaw: number } | null {
   const a = getRoomById(def.from);
   const b = getRoomById(def.to);
   if (!a || !b) return null;
-
+  const p = doorOnRoom(a, b);
   const dx = b.cx - a.cx;
   const dz = b.cz - a.cz;
-  if (Math.abs(dx) > Math.abs(dz)) {
-    const x = dx > 0 ? a.cx + a.hw : a.cx - a.hw;
-    const z = (Math.max(a.cz - a.hd, b.cz - b.hd) + Math.min(a.cz + a.hd, b.cz + b.hd)) / 2;
-    return { x, z, yaw: 0 };
+  return { x: p.x, z: p.z, yaw: Math.abs(dx) > Math.abs(dz) ? 0 : Math.PI / 2 };
+}
+
+export function roomPath(fromId: string, toId: string): string[] {
+  if (fromId === toId) return [fromId];
+  const adj = new Map<string, string[]>();
+  for (const d of DOORWAYS) {
+    if (!adj.has(d.from)) adj.set(d.from, []);
+    if (!adj.has(d.to)) adj.set(d.to, []);
+    adj.get(d.from)!.push(d.to);
+    adj.get(d.to)!.push(d.from);
   }
-  const z = dz > 0 ? a.cz + a.hd : a.cz - a.hd;
-  const x = (Math.max(a.cx - a.hw, b.cx - b.hw) + Math.min(a.cx + a.hw, b.cx + b.hw)) / 2;
-  return { x, z, yaw: Math.PI / 2 };
+  const q = [fromId];
+  const prev = new Map<string, string | null>([[fromId, null]]);
+  while (q.length) {
+    const cur = q.shift()!;
+    if (cur === toId) break;
+    for (const n of adj.get(cur) ?? []) {
+      if (prev.has(n)) continue;
+      prev.set(n, cur);
+      q.push(n);
+    }
+  }
+  if (!prev.has(toId)) return [];
+  const out = [toId];
+  while (out[0] !== fromId) {
+    const p = prev.get(out[0]!)!;
+    out.unshift(p);
+  }
+  return out;
+}
+
+/** Next point The Hollow should walk toward without leaving corridors. */
+export function steerToward(x: number, z: number, tx: number, tz: number): { x: number; z: number } {
+  const from = getRoomAt(x, z);
+  const to = getRoomAt(tx, tz);
+  if (!from) {
+    let best = MAP_ROOMS[0]!;
+    let bestD = Infinity;
+    for (const r of MAP_ROOMS) {
+      const d = (r.cx - x) ** 2 + (r.cz - z) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = r;
+      }
+    }
+    return { x: best.cx, z: best.cz };
+  }
+  if (!to || from.id === to.id) return { x: tx, z: tz };
+  const path = roomPath(from.id, to.id);
+  if (path.length < 2) return { x: tx, z: tz };
+  const next = getRoomById(path[1]!)!;
+  const door = doorOnRoom(from, next);
+  if (Math.hypot(door.x - x, door.z - z) < 0.6) return doorOnRoom(next, from);
+  return door;
 }
 
 export interface WallSeg {
@@ -120,21 +183,18 @@ function gapOnEdge(
     const west = dx < 0 && Math.abs(dx) > Math.abs(dz);
     const north = dz > 0 && Math.abs(dz) >= Math.abs(dx);
     const south = dz < 0 && Math.abs(dz) >= Math.abs(dx);
+    const c = doorOnRoom(room, other);
     if (side === "e" && east) {
-      const c = doorwayCenter(d);
-      if (c) gaps.push({ start: c.z - DOOR_WIDTH / 2, end: c.z + DOOR_WIDTH / 2 });
+      gaps.push({ start: c.z - DOOR_WIDTH / 2, end: c.z + DOOR_WIDTH / 2 });
     }
     if (side === "w" && west) {
-      const c = doorwayCenter(d);
-      if (c) gaps.push({ start: c.z - DOOR_WIDTH / 2, end: c.z + DOOR_WIDTH / 2 });
+      gaps.push({ start: c.z - DOOR_WIDTH / 2, end: c.z + DOOR_WIDTH / 2 });
     }
     if (side === "n" && north) {
-      const c = doorwayCenter(d);
-      if (c) gaps.push({ start: c.x - DOOR_WIDTH / 2, end: c.x + DOOR_WIDTH / 2 });
+      gaps.push({ start: c.x - DOOR_WIDTH / 2, end: c.x + DOOR_WIDTH / 2 });
     }
     if (side === "s" && south) {
-      const c = doorwayCenter(d);
-      if (c) gaps.push({ start: c.x - DOOR_WIDTH / 2, end: c.x + DOOR_WIDTH / 2 });
+      gaps.push({ start: c.x - DOOR_WIDTH / 2, end: c.x + DOOR_WIDTH / 2 });
     }
   }
   return gaps;
@@ -186,7 +246,72 @@ export function buildWalls(): WallSeg[] {
   return walls;
 }
 
-export const WALLS = buildWalls();
+export interface CorridorFloor {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+}
+
+/** Solid walls along the sides of the gaps between rooms so players cannot walk into the void. */
+export function buildCorridors(): { walls: WallSeg[]; floors: CorridorFloor[] } {
+  const walls: WallSeg[] = [];
+  const floors: CorridorFloor[] = [];
+  const t = WALL_THICKNESS;
+  const inner = DOOR_WIDTH / 2;
+  for (const def of DOORWAYS) {
+    const a = getRoomById(def.from);
+    const b = getRoomById(def.to);
+    if (!a || !b) continue;
+    const from = doorOnRoom(a, b);
+    const to = doorOnRoom(b, a);
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    if (Math.abs(dx) >= Math.abs(dz)) {
+      const x0 = Math.min(from.x, to.x);
+      const x1 = Math.max(from.x, to.x);
+      if (x1 - x0 < 0.12) continue;
+      const z = (from.z + to.z) / 2;
+      addWall(walls, x0, x1, z + inner, z + inner + t);
+      addWall(walls, x0, x1, z - inner - t, z - inner);
+      floors.push({ x: (x0 + x1) / 2, z, w: x1 - x0 + 0.2, d: DOOR_WIDTH });
+    } else {
+      const z0 = Math.min(from.z, to.z);
+      const z1 = Math.max(from.z, to.z);
+      if (z1 - z0 < 0.12) continue;
+      const x = (from.x + to.x) / 2;
+      addWall(walls, x + inner, x + inner + t, z0, z1);
+      addWall(walls, x - inner - t, x - inner, z0, z1);
+      floors.push({ x, z: (z0 + z1) / 2, w: DOOR_WIDTH, d: z1 - z0 + 0.2 });
+    }
+  }
+  return { walls, floors };
+}
+
+const CORRIDOR = buildCorridors();
+export const CORRIDOR_FLOORS = CORRIDOR.floors;
+export const WALLS = [...buildWalls(), ...CORRIDOR.walls];
+
+/** Collision for locked doors so the office and exit cannot be skipped. */
+export function doorBlockers(doors: { id: string; open: boolean; locked: boolean }[]): WallSeg[] {
+  const walls: WallSeg[] = [];
+  const t = WALL_THICKNESS + 0.08;
+  for (const state of doors) {
+    if (!state.locked) continue;
+    const def = DOORWAYS.find((d) => d.id === state.id);
+    if (!def) continue;
+    const c = doorwayCenter(def);
+    const a = getRoomById(def.from);
+    const b = getRoomById(def.to);
+    if (!c || !a || !b) continue;
+    if (Math.abs(b.cx - a.cx) > Math.abs(b.cz - a.cz)) {
+      addWall(walls, c.x - t, c.x + t, c.z - DOOR_WIDTH / 2, c.z + DOOR_WIDTH / 2);
+    } else {
+      addWall(walls, c.x - DOOR_WIDTH / 2, c.x + DOOR_WIDTH / 2, c.z - t, c.z + t);
+    }
+  }
+  return walls;
+}
 
 export function circleHitsWall(
   x: number,
@@ -227,24 +352,24 @@ export const KEY_SPAWN_ROOMS = ["storage", "basement", "children", "reception"] 
 
 export const NOTES: Record<string, { title: string; body: string }> = {
   "note-01": {
-    title: "NOTE #01",
-    body: "Subject 07 reported seeing something behind the observer. The observer reported nothing. Both recordings were later found incomplete.",
+    title: "SITE 07 — INTAKE",
+    body: "Two subjects. One walks. One watches through the observer channel. The channel is a person, not a camera. If the walker turns around during a behind-event, the recording ends.",
   },
   "note-02": {
-    title: "NOTE #02",
-    body: "The entity does not appear to exist in our physical recording. It is visible only through the secondary consciousness channel.",
+    title: "ENTITY CLASS: HOLLOW",
+    body: "It will not show on tape. Spirit and Echo frequencies reveal it. A flashlight slows a stalk. It does not banish a hunt. When it hunts, you will see it. Run.",
   },
   "note-03": {
-    title: "NOTE #03",
-    body: "Never allow both subjects to look at the same mirror. Sequence for Site B lock: the Watcher already knows it. Do not write it down.",
+    title: "SECURITY LOCK",
+    body: "The four-symbol pad is not written down. The Watcher reads the marks on the security wall in SPIRIT. Do not radio the sequence in the clear if something is listening.",
   },
   "note-04": {
-    title: "HANDWRITTEN",
-    body: "If it stands behind you, do not turn around. If your partner tells you to turn around, they are already gone.",
+    title: "HANDWRITTEN — ELI",
+    body: "If it stands behind you, do not turn around. If your partner tells you to turn around, they are already gone. If the signal says STABLE, you can still be wrong.",
   },
   "note-05": {
-    title: "SECURITY MEMO",
-    body: "Generator failsafe: only one breaker is isolated. The others trip the containment field. The night-shift diagram is on the spirit channel.",
+    title: "GENERATOR FAILSAFE",
+    body: "Three breakers. One is isolated. DANGER frequency paints the true breaker gold and the traps red. The other two wake it.",
   },
 };
 

@@ -1,6 +1,7 @@
 import type { MonsterAiState, MonsterState, Vec3 } from "../../shared/types";
 import { dist2 } from "../../shared/utils";
-import { getRoomAt, MAP_ROOMS } from "../../shared/map";
+import { PLAYER_RADIUS } from "../../shared/constants";
+import { MAP_ROOMS, resolveMove, steerToward, WALLS } from "../../shared/map";
 
 export interface MonsterBrain {
   state: MonsterState;
@@ -51,9 +52,9 @@ function pickState(noise: boolean, close: boolean): MonsterAiState {
 function roamPoint(): Vec3 {
   const room = MAP_ROOMS[Math.floor(Math.random() * MAP_ROOMS.length)]!;
   return {
-    x: room.cx + (Math.random() - 0.5) * room.hw * 1.2,
+    x: room.cx + (Math.random() - 0.5) * room.hw * 0.7,
     y: 0,
-    z: room.cz + (Math.random() - 0.5) * room.hd * 1.2,
+    z: room.cz + (Math.random() - 0.5) * room.hd * 0.7,
   };
 }
 
@@ -69,11 +70,12 @@ export function tickMonster(
   brain.stateTimer -= dt;
   brain.behindCooldown -= dt;
   if (noise) brain.lastNoise = noise;
+  void generatorOn;
 
   if (m.behindWalker) {
     m.behindTimer -= dt;
     const bx = walker.x - Math.sin(walker.yaw) * 1.85;
-    const bz = walker.z - Math.cos(walker.yaw) * 1.85;
+    const bz = walker.z + Math.cos(walker.yaw) * 1.85;
     m.position.x = bx;
     m.position.z = bz;
     m.yaw = walker.yaw;
@@ -82,18 +84,9 @@ export function tickMonster(
       m.behindWalker = false;
       m.ai = "retreat";
       brain.stateTimer = 3;
-      m.position = roamPoint();
-    }
-    return { caught: false, startedBehind: false };
-  }
-
-  if (flashlightOn && m.ai !== "hunting" && m.ai !== "attack") {
-    const d = Math.sqrt(dist2(m.position.x, m.position.z, walker.x, walker.z));
-    if (d < 7 && m.ai !== "retreat") {
-      m.ai = "retreat";
-      brain.stateTimer = 2 + Math.random() * 2;
       brain.target = roamPoint();
     }
+    return { caught: false, startedBehind: false };
   }
 
   if (brain.stateTimer <= 0 && m.ai !== "attack") {
@@ -118,38 +111,53 @@ export function tickMonster(
   let speed = 0.9;
   if (m.ai === "stalking") speed = 1.6;
   if (m.ai === "investigating") speed = 2.1;
-  if (m.ai === "hunting") speed = 3.4;
+  if (m.ai === "hunting") speed = 4.4;
   if (m.ai === "retreat") speed = 4.2;
   if (m.ai === "observing") speed = 0.35;
   if (m.ai === "idle") speed = 0.15;
 
-  const target =
-    m.ai === "hunting" || m.ai === "attack"
-      ? { x: walker.x, z: walker.z }
-      : brain.target;
+  const dist = Math.sqrt(dist2(m.position.x, m.position.z, walker.x, walker.z));
+  const hunting = m.ai === "hunting" || m.ai === "attack";
+  if (flashlightOn && !hunting && dist < 7) {
+    speed *= 0.38;
+    if (dist < 3.2 && m.ai !== "retreat") {
+      m.ai = "retreat";
+      brain.stateTimer = 1.6 + Math.random();
+      brain.target = roamPoint();
+    }
+  }
 
-  if (target) {
-    const dx = target.x - m.position.x;
-    const dz = target.z - m.position.z;
+  const rawTarget =
+    hunting
+      ? { x: walker.x, z: walker.z }
+      : brain.target
+        ? { x: brain.target.x, z: brain.target.z }
+        : null;
+
+  if (rawTarget) {
+    const steer = steerToward(m.position.x, m.position.z, rawTarget.x, rawTarget.z);
+    const dx = steer.x - m.position.x;
+    const dz = steer.z - m.position.z;
     const len = Math.hypot(dx, dz) || 1;
-    m.position.x += (dx / len) * speed * dt;
-    m.position.z += (dz / len) * speed * dt;
+    const wishX = (dx / len) * speed * dt;
+    const wishZ = (dz / len) * speed * dt;
+    const next = resolveMove(m.position.x, m.position.z, wishX, wishZ, PLAYER_RADIUS * 0.85, WALLS);
+    m.position.x = next.x;
+    m.position.z = next.z;
     m.yaw = Math.atan2(dx, dz);
   }
 
-  const dist = Math.sqrt(dist2(m.position.x, m.position.z, walker.x, walker.z));
-  m.visibleToWalker = m.ai === "hunting" || m.ai === "attack" || (m.ai === "stalking" && dist < 4 && Math.random() < 0.02);
-
-  if (generatorOn && dist < 5 && m.ai !== "hunting") {
-    m.visibleToWalker = false;
-  }
+  const distNow = Math.sqrt(dist2(m.position.x, m.position.z, walker.x, walker.z));
+  m.visibleToWalker =
+    hunting || (m.ai === "stalking" && distNow < 4 && Math.random() < 0.02);
 
   let startedBehind = false;
+  const behindChance = flashlightOn ? 0.006 : 0.014;
   if (
     brain.behindCooldown <= 0 &&
     (m.ai === "stalking" || m.ai === "observing") &&
-    dist > 3 &&
-    Math.random() < 0.012
+    distNow > 3 &&
+    Math.random() < behindChance
   ) {
     m.behindWalker = true;
     m.behindTimer = 4.2;
@@ -160,14 +168,9 @@ export function tickMonster(
     startedBehind = true;
   }
 
-  if (m.ai === "hunting" && dist < 1.15) {
+  if (m.ai === "hunting" && distNow < 1.15) {
     m.ai = "attack";
     return { caught: true, startedBehind };
-  }
-
-  const room = getRoomAt(m.position.x, m.position.z);
-  if (!room && brain.target) {
-    m.position.x += (brain.target.x - m.position.x) * 0.02;
   }
 
   return { caught: false, startedBehind };

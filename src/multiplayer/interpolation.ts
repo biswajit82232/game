@@ -12,8 +12,8 @@ export class InterpolatedVec {
     this.t = 0;
   }
 
-  sample(step = 0.18): Vec3 {
-    this.t = Math.min(1, this.t + step);
+  sample(dt = 1 / 60): Vec3 {
+    this.t = Math.min(1, this.t + dt / 0.09);
     return {
       x: lerp(this.from.x, this.to.x, this.t),
       y: lerp(this.from.y, this.to.y, this.t),

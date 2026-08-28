@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { GameSnapshot, Role, WatcherMode } from "../../shared/types";
 import { PLAYER_HEIGHT } from "../../shared/constants";
+import { doorBlockers } from "../../shared/map";
 import type { GameSettings } from "../systems/settings";
 import { EffectBus } from "../systems/effects";
 import { InterpolatedVec } from "../multiplayer/interpolation";
@@ -32,6 +33,8 @@ export class GameEngine {
   readonly effects = new EffectBus();
   private world: WorldHandles;
   private hollow: THREE.Group;
+  private echoHollow: THREE.Group;
+  private echoTrail: { x: number; z: number; yaw: number }[] = [];
   private flashlight: THREE.SpotLight;
   private ambient: THREE.AmbientLight;
   private hemi: THREE.HemisphereLight;
@@ -49,6 +52,12 @@ export class GameEngine {
   private flicker = 1;
   private mode: WatcherMode = "normal";
   paused = false;
+  private dpr: number;
+  private slowFrames = 0;
+  private hidden = false;
+  private fogWalker = new THREE.FogExp2(0x101218, 0.032);
+  private fogWatcher = new THREE.FogExp2(0x08140c, 0.038);
+  private placed = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -56,32 +65,37 @@ export class GameEngine {
     private settings: GameSettings,
     private callbacks: EngineCallbacks,
   ) {
+    const mobile = isTouchPreferred();
+    const high = settings.graphics === "high" && !mobile;
+    this.dpr = Math.min(window.devicePixelRatio || 1, high ? 1.6 : 1);
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: settings.graphics === "high",
+      antialias: high,
       powerPreference: "high-performance",
+      alpha: false,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.graphics === "high" ? 2 : 1));
+    this.renderer.setPixelRatio(this.dpr);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = role === "watcher" ? 0.85 : 1.05;
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.toneMappingExposure = role === "watcher" ? 0.82 : 0.92;
+    this.renderer.shadowMap.enabled = high;
+    if (high) this.renderer.shadowMap.type = THREE.BasicShadowMap;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(role === "watcher" ? 0x08140c : 0x101218);
-    this.scene.fog = new THREE.FogExp2(role === "watcher" ? 0x08140c : 0x101218, 0.028);
+    this.scene.background = new THREE.Color(role === "watcher" ? 0x08140c : 0x0c1016);
+    this.scene.fog = role === "watcher" ? this.fogWatcher : this.fogWalker;
 
     this.camera = new THREE.PerspectiveCamera(
-      72,
+      mobile ? 68 : 72,
       (canvas.clientWidth || window.innerWidth) / (canvas.clientHeight || window.innerHeight),
       0.08,
-      80,
+      settings.graphics === "high" ? 72 : 46,
     );
 
-    this.ambient = new THREE.AmbientLight(0x6a7380, role === "watcher" ? 0.55 : 0.7);
-    this.hemi = new THREE.HemisphereLight(0x8899aa, 0x1a1814, 0.65);
+    this.ambient = new THREE.AmbientLight(0x6a7380, role === "watcher" ? 0.42 : 0.38);
+    this.hemi = new THREE.HemisphereLight(0x8899aa, 0x1a1814, role === "watcher" ? 0.5 : 0.38);
     this.scene.add(this.ambient, this.hemi);
-    const fill = new THREE.DirectionalLight(0xc8c0a8, 0.35);
+    const fill = new THREE.DirectionalLight(0xc8c0a8, 0.18);
     fill.position.set(8, 12, 6);
     this.scene.add(fill);
 
@@ -90,9 +104,26 @@ export class GameEngine {
 
     this.hollow = createHollow();
     this.scene.add(this.hollow);
+    this.echoHollow = createHollow();
+    this.echoHollow.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
+      if (mat && "opacity" in mat) {
+        mat.transparent = true;
+        mat.opacity = 0.32;
+      }
+    });
+    this.echoHollow.visible = false;
+    this.scene.add(this.echoHollow);
 
-    this.flashlight = new THREE.SpotLight(0xf2e6c9, 4.2, 22, Math.PI / 6, 0.28, 1);
+    this.flashlight = new THREE.SpotLight(0xf2e6c9, 5.4, 18, Math.PI / 7.5, 0.35, 1.2);
     this.flashlight.visible = role === "walker";
+    this.flashlight.castShadow = high;
+    if (high) {
+      this.flashlight.shadow.mapSize.set(512, 512);
+      this.flashlight.shadow.camera.near = 0.4;
+      this.flashlight.shadow.camera.far = 18;
+    }
     this.camera.add(this.flashlight);
     this.flashlight.target.position.set(0, 0, -1);
     this.camera.add(this.flashlight.target);
@@ -111,7 +142,8 @@ export class GameEngine {
     this.walkerMarker.visible = role === "watcher";
     this.scene.add(this.walkerMarker);
 
-    this.controller.sensitivity = settings.sensitivity * 0.01;
+    this.controller.sensitivity = settings.sensitivity * 0.012;
+    this.controller.invertY = settings.invertLookY;
     this.controller.x = 0;
     this.controller.z = 0;
     this.controller.touchMode = isTouchPreferred();
@@ -121,6 +153,7 @@ export class GameEngine {
     this.resizeObserver.observe(canvas.parentElement ?? canvas);
     window.visualViewport?.addEventListener("resize", this.onResize);
     this.onResize();
+    document.addEventListener("visibilitychange", this.onVisibility);
     this.raf = requestAnimationFrame(this.loop);
   }
 
@@ -133,17 +166,24 @@ export class GameEngine {
     if (snap.monster) this.monsterLerp.push(snap.monster.position);
     this.walkerLerp.push(snap.walker.position);
 
-    if (this.role === "walker") {
+    const body = this.role === "walker" ? snap.walker : snap.watcher;
+    if (!this.placed) {
+      this.controller.x = body.position.x;
+      this.controller.z = body.position.z;
+      this.controller.yaw = body.yaw;
+      this.controller.pitch = body.pitch;
+      this.placed = true;
+    } else if (this.role === "walker") {
       const dx = snap.walker.position.x - this.controller.x;
       const dz = snap.walker.position.z - this.controller.z;
-      if (dx * dx + dz * dz > 6) {
+      if (dx * dx + dz * dz > 2.8) {
         this.controller.x = snap.walker.position.x;
         this.controller.z = snap.walker.position.z;
       }
     } else {
       const dx = snap.watcher.position.x - this.controller.x;
       const dz = snap.watcher.position.z - this.controller.z;
-      if (dx * dx + dz * dz > 10) {
+      if (dx * dx + dz * dz > 6) {
         this.controller.x = snap.watcher.position.x;
         this.controller.z = snap.watcher.position.z;
       }
@@ -152,7 +192,8 @@ export class GameEngine {
 
   setSettings(settings: GameSettings): void {
     this.settings = settings;
-    this.controller.sensitivity = settings.sensitivity * 0.01;
+    this.controller.sensitivity = settings.sensitivity * 0.012;
+    this.controller.invertY = settings.invertLookY;
   }
 
   private onResize = (): void => {
@@ -164,20 +205,38 @@ export class GameEngine {
     this.renderer.setSize(w, h, false);
   };
 
+  private onVisibility = (): void => {
+    this.hidden = document.hidden;
+    if (!this.hidden) this.last = performance.now();
+  };
+
   private loop = (now: number): void => {
     if (this.disposed) return;
+    this.raf = requestAnimationFrame(this.loop);
+    if (this.hidden) {
+      this.last = now;
+      return;
+    }
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    if (dt > 0.038) this.slowFrames += 1;
+    else this.slowFrames = Math.max(0, this.slowFrames - 1);
+    if (this.slowFrames > 40 && this.dpr > 0.75) {
+      this.dpr = 0.75;
+      this.renderer.setPixelRatio(0.75);
+      this.onResize();
+      this.slowFrames = 0;
+    }
     this.update(dt);
     this.renderer.render(this.scene, this.camera);
-    this.raf = requestAnimationFrame(this.loop);
   };
 
   private update(dt: number): void {
     if (this.paused) return;
     const snap = this.snapshot;
     const stamina = snap?.walker.stamina ?? 100;
-    const { sprinting, moving } = this.controller.step(dt, this.role, stamina);
+    const extraWalls = this.role === "walker" && snap ? doorBlockers(snap.doors) : [];
+    const { sprinting, moving } = this.controller.step(dt, this.role, stamina, extraWalls);
     this.controller.stepLook(dt);
     this.effects.tick(dt);
 
@@ -187,7 +246,7 @@ export class GameEngine {
       this.controller.z,
     );
     this.camera.rotation.order = "YXZ";
-    this.camera.rotation.y = this.controller.yaw + Math.PI;
+    this.camera.rotation.y = this.controller.yaw;
     this.camera.rotation.x = this.controller.pitch;
 
     const shakeOn = this.settings.shake && !this.settings.reduceMotion;
@@ -205,30 +264,76 @@ export class GameEngine {
     if (snap?.monster?.behindWalker || (snap?.monster && distApprox(snap))) {
       this.flicker = 0.65 + Math.random() * 0.25;
     }
-    this.flashlight.intensity = flashlightOn && (snap?.walker.battery ?? 100) > 0 ? 4.2 * this.flicker : 0;
+    const battery = snap?.walker.battery ?? 100;
+    this.flashlight.intensity = flashlightOn && battery > 0 ? 5.6 * this.flicker : 0;
+    this.ambient.intensity = this.role === "watcher" ? 0.42 : flashlightOn && battery > 8 ? 0.38 : 0.22;
+    this.hemi.intensity = this.role === "watcher" ? 0.5 : flashlightOn && battery > 8 ? 0.38 : 0.24;
 
     if (this.role === "watcher") {
-      this.renderer.toneMappingExposure = this.mode === "spirit" ? 1.0 : this.mode === "danger" ? 0.9 : 0.8;
-      this.scene.fog = new THREE.FogExp2(this.mode === "spirit" ? 0x0a1c10 : 0x08140c, this.mode === "normal" ? 0.04 : 0.03);
+      if (this.mode === "spirit") {
+        this.renderer.toneMappingExposure = 1.08;
+        this.fogWatcher.color.setHex(0x0a2814);
+        this.fogWatcher.density = 0.028;
+        this.scene.background = new THREE.Color(0x04180c);
+      } else if (this.mode === "echo") {
+        this.renderer.toneMappingExposure = 0.92;
+        this.fogWatcher.color.setHex(0x140828);
+        this.fogWatcher.density = 0.034;
+        this.scene.background = new THREE.Color(0x0c0614);
+      } else if (this.mode === "danger") {
+        this.renderer.toneMappingExposure = 0.95;
+        this.fogWatcher.color.setHex(0x221408);
+        this.fogWatcher.density = 0.03;
+        this.scene.background = new THREE.Color(0x140806);
+      } else {
+        this.renderer.toneMappingExposure = 0.62;
+        this.fogWatcher.color.setHex(0x08140c);
+        this.fogWatcher.density = 0.05;
+        this.scene.background = new THREE.Color(0x050a08);
+      }
+      this.scene.fog = this.fogWatcher;
     }
 
-    const monsterPos = this.monsterLerp.sample();
+    const monsterPos = this.monsterLerp.sample(dt);
+    const hunting = snap?.monster?.ai === "hunting" || snap?.monster?.ai === "attack";
     const showMonster =
       this.role === "watcher"
-        ? this.mode === "spirit" || this.mode === "echo" || Boolean(snap?.monster)
-        : Boolean(snap?.monster?.visibleToWalker);
+        ? this.mode === "spirit" || this.mode === "echo" || hunting || Boolean(snap?.monster)
+        : Boolean(snap?.monster?.visibleToWalker) || hunting;
     this.hollow.visible = showMonster && Boolean(snap?.monster);
     if (snap?.monster && this.hollow.visible) {
       this.hollow.position.set(monsterPos.x, 0, monsterPos.z);
       this.hollow.rotation.y = snap.monster.yaw;
-      animateHollow(this.hollow, performance.now() / 1000);
+      this.hollow.scale.setScalar(hunting ? 1.35 : 1);
+      animateHollow(this.hollow, performance.now() / 1000, hunting);
+      this.echoTrail.push({ x: monsterPos.x, z: monsterPos.z, yaw: snap.monster.yaw });
+      if (this.echoTrail.length > 48) this.echoTrail.shift();
+    }
+    const echoShow = this.role === "watcher" && this.mode === "echo" && this.echoTrail.length > 18;
+    this.echoHollow.visible = echoShow;
+    if (echoShow) {
+      const old = this.echoTrail[0]!;
+      this.echoHollow.position.set(old.x, 0, old.z);
+      this.echoHollow.rotation.y = old.yaw;
+      animateHollow(this.echoHollow, performance.now() / 1000, false);
     }
 
     if (this.role === "watcher" && snap) {
-      const wp = this.walkerLerp.sample();
+      const wp = this.walkerLerp.sample(dt);
       this.walkerMarker.position.set(wp.x, 0.9, wp.z);
       this.walkerMarker.rotation.y = snap.walker.yaw;
-      this.walkerMarker.visible = this.mode !== "normal";
+      this.walkerMarker.visible = true;
+      const mat = this.walkerMarker.material as THREE.MeshStandardMaterial;
+      mat.opacity = this.mode === "normal" ? 0.16 : 0.35;
+    }
+
+    const showGlyphs = this.role === "watcher" && (this.mode === "spirit" || this.mode === "echo");
+    for (const plate of this.world.glyphs) {
+      plate.visible = showGlyphs;
+      const mat = plate.material as THREE.MeshStandardMaterial;
+      const name = plate.userData.glyph as string;
+      const inSol = snap?.symbolSolution?.includes(name);
+      mat.emissiveIntensity = showGlyphs ? (inSol ? 1.4 : 0.35) : 0;
     }
 
     for (const [id, mesh] of this.world.items) {
@@ -287,6 +392,11 @@ export class GameEngine {
     window.removeEventListener("resize", this.onResize);
     this.resizeObserver.disconnect();
     window.visualViewport?.removeEventListener("resize", this.onResize);
+    document.removeEventListener("visibilitychange", this.onVisibility);
+    this.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+    });
     this.renderer.dispose();
     this.effects.reset();
   }

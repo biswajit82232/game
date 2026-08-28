@@ -42,11 +42,13 @@ export function GameView({
   const [fx, setFx] = useState({ grain: 0, shake: 0 });
   const [showSettings, setShowSettings] = useState(false);
   const [touch, setTouch] = useState(() => isTouchPreferred());
+  const [looking, setLooking] = useState(false);
   const gyroRef = useRef<((ev: DeviceOrientationEvent) => void) | null>(null);
+  const chase = snapshot?.monster?.ai === "hunting" || snapshot?.monster?.ai === "attack";
 
   useEffect(() => {
-    if (engineRef.current) engineRef.current.paused = paused;
-  }, [paused]);
+    if (engineRef.current) engineRef.current.paused = paused || keypad || Boolean(note);
+  }, [paused, keypad, note]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -55,7 +57,11 @@ export function GameView({
     const engine = new GameEngine(canvas, role, settings, {
       onPrompt: setPrompt,
       onInteract: (id) => {
-        if (id === "keypad-security") setKeypad(true);
+        if (id === "keypad-security") {
+          setKeypad(true);
+          setSymbols([]);
+          document.exitPointerLock();
+        }
       },
       sendMove: (payload) => socket.emit("player:move", payload),
       sendFlashlight: (on) => socket.emit("player:flashlight", { on }),
@@ -75,15 +81,31 @@ export function GameView({
         if (e.code === "KeyQ") socket.emit("player:warning");
       }
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "KeyR") socket.emit("player:holdSignal", { holding: false });
+    };
+    const onKeyDownHold = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.code === "KeyR") socket.emit("player:holdSignal", { holding: true });
+    };
     const onEvent = ({ type }: { type: string }) => {
       applyGameEvent(type, engine);
       if (type === "watcher-distort" || type === "silhouette-flash") {
         setFx({ grain: 1, shake: 1 });
         window.setTimeout(() => setFx({ grain: 0, shake: 0 }), 1200);
       }
+      if (type === "puzzle-fail") setSymbols([]);
+      if (type === "puzzle") {
+        setKeypad(false);
+        setSymbols([]);
+      }
     };
     socket.on("game:event", onEvent);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKeyDownHold);
+    window.addEventListener("keyup", onKeyUp);
+    const onLock = () => setLooking(document.pointerLockElement === canvas);
+    document.addEventListener("pointerlockchange", onLock);
     const onResize = () => {
       const next = isTouchPreferred();
       setTouch(next);
@@ -92,11 +114,19 @@ export function GameView({
     window.addEventListener("resize", onResize);
     const blockZoom = (e: Event) => e.preventDefault();
     document.addEventListener("gesturestart", blockZoom);
+    const stopScroll = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+    };
+    canvas.parentElement?.addEventListener("touchmove", stopScroll, { passive: false });
     return () => {
       socket.off("game:event", onEvent);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKeyDownHold);
+      window.removeEventListener("keyup", onKeyUp);
+      document.removeEventListener("pointerlockchange", onLock);
       window.removeEventListener("resize", onResize);
       document.removeEventListener("gesturestart", blockZoom);
+      canvas.parentElement?.removeEventListener("touchmove", stopScroll);
       if (gyroRef.current) window.removeEventListener("deviceorientation", gyroRef.current);
       engine.dispose();
       engineRef.current = null;
@@ -117,13 +147,17 @@ export function GameView({
   return (
     <div className={`game-wrap${touch ? " is-touch" : ""}`}>
       <canvas ref={canvasRef} />
-      {settings.grain && !settings.reduceMotion && (
+      {settings.grain && !settings.reduceMotion && settings.graphics === "high" && (
         <div className="grain" style={{ opacity: 0.06 + fx.grain * 0.1 }} />
       )}
       <div className="vignette" />
       {role === "watcher" && <div className="watcher-fx" />}
+      {chase && <div className="chase-scare" />}
       {!snapshot && (
         <div className="prompt">LOADING THE BUILDING…</div>
+      )}
+      {snapshot && !touch && !looking && !paused && !keypad && !note && !prompt && (
+        <div className="prompt">CLICK TO LOOK · WASD MOVE · SHIFT RUN</div>
       )}
       {snapshot && role === "walker" && (
         <WalkerHUD snap={snapshot} prompt={prompt} otherAlive={!disconnected} touch={touch} />
@@ -131,6 +165,7 @@ export function GameView({
       {snapshot && role === "watcher" && (
         <WatcherHUD
           snap={snapshot}
+          touch={touch}
           onMode={(mode: WatcherMode) => socket.emit("player:switchMode", { mode })}
           onWarn={() => socket.emit("player:warning")}
           onHold={(holding) => socket.emit("player:holdSignal", { holding })}
@@ -140,6 +175,7 @@ export function GameView({
       {touch && (
         <TouchControls
           role={role}
+          solo={Boolean(snapshot?.solo)}
           prompt={prompt}
           onMove={(x, y) => engineRef.current?.controller.setMoveAxis(x, y)}
           onLookAxis={(x, y) => engineRef.current?.controller.setLookAxis(x, y)}
@@ -158,42 +194,47 @@ export function GameView({
           }}
           onWarn={() => socket.emit("player:warning")}
           onHold={(held) => socket.emit("player:holdSignal", { holding: held })}
-          onGyro={async () => {
-            const DOE = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
-            if (typeof DOE.requestPermission === "function") {
-              const res = await DOE.requestPermission();
-              if (res !== "granted") return;
-            }
-            if (gyroRef.current) window.removeEventListener("deviceorientation", gyroRef.current);
-            let lastG: number | null = null;
-            let lastB: number | null = null;
-            const onOrient = (ev: DeviceOrientationEvent) => {
-              if (ev.gamma == null || ev.beta == null) return;
-              if (lastG == null || lastB == null) {
-                lastG = ev.gamma;
-                lastB = ev.beta;
-                return;
-              }
-              const dg = ev.gamma - lastG;
-              const db = ev.beta - lastB;
-              lastG = ev.gamma;
-              lastB = ev.beta;
-              engineRef.current?.controller.applyLook(dg * 6.5, db * 6.5, 1);
-            };
-            gyroRef.current = onOrient;
-            window.addEventListener("deviceorientation", onOrient);
-          }}
+          onRadio={(held) => socket.emit("player:holdSignal", { holding: held })}
+          onGyro={
+            settings.gyroLook
+              ? async () => {
+                  const DOE = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
+                  if (typeof DOE.requestPermission === "function") {
+                    const res = await DOE.requestPermission();
+                    if (res !== "granted") return;
+                  }
+                  if (gyroRef.current) window.removeEventListener("deviceorientation", gyroRef.current);
+                  let lastG: number | null = null;
+                  let lastB: number | null = null;
+                  const onOrient = (ev: DeviceOrientationEvent) => {
+                    if (ev.gamma == null || ev.beta == null) return;
+                    if (lastG == null || lastB == null) {
+                      lastG = ev.gamma;
+                      lastB = ev.beta;
+                      return;
+                    }
+                    const dg = ev.gamma - lastG;
+                    const db = ev.beta - lastB;
+                    lastG = ev.gamma;
+                    lastB = ev.beta;
+                    engineRef.current?.controller.applyLook(dg * 6.5, db * 6.5, 1);
+                  };
+                  gyroRef.current = onOrient;
+                  window.addEventListener("deviceorientation", onOrient);
+                }
+              : undefined
+          }
         />
       )}
       {settings.subtitles && snapshot?.subtitles && <div className="subtitles">{snapshot.subtitles}</div>}
       {keypad && (
         <KeypadModal
           selected={symbols}
+          hint={snapshot?.solo ? snapshot.symbolSolution : null}
           onPick={(id) => setSymbols((s) => [...s, id].slice(0, 4))}
+          onClear={() => setSymbols([])}
           onSubmit={() => {
             socket.emit("player:puzzleInput", { puzzleId: "symbols", value: symbols });
-            setKeypad(false);
-            setSymbols([]);
           }}
           onClose={() => {
             setKeypad(false);
@@ -239,9 +280,22 @@ export function applyGameEvent(
   audio = getAudio(),
 ): void {
   if (!engine) return;
-  if (type === "death" || type === "behind" || type === "silhouette-flash") {
+  if (type === "warning" || type === "behind") {
+    engine.effects.trigger("heartbeat", 2.2, 1);
+    audio.radio();
+    if (type === "behind") {
+      engine.effects.trigger("shake", 0.5, 1);
+      audio.scare();
+    }
+  } else if (type === "death" || type === "silhouette-flash") {
     engine.effects.trigger("shake", 0.5, 1);
     engine.effects.trigger("heartbeat", 2, 1);
+    audio.scare();
+  } else if (type === "chase-scare") {
+    engine.effects.trigger("shake", 1.4, 1);
+    engine.effects.trigger("heartbeat", 4, 1);
+    audio.laugh();
+    audio.scream();
     audio.scare();
   } else if (type === "watcher-distort" || type === "static") {
     engine.effects.trigger("static", 1.5, 1);

@@ -1,90 +1,96 @@
 import { PLAYER_RADIUS, SPRINT_SPEED, WALK_SPEED, WATCHER_FLY_SPEED } from "../../../shared/constants";
-import { resolveMove } from "../../../shared/map";
+import { WALLS, resolveMove, type WallSeg } from "../../../shared/map";
 import type { Role } from "../../../shared/types";
 
 export class WalkerController {
   keys = new Set<string>();
-  yaw = Math.PI / 2;
+  yaw = 0;
   pitch = 0;
   x = 0;
   z = 0;
   locked = false;
   touchMode = false;
+  invertY = false;
   moveAxis = { x: 0, y: 0 };
   lookAxis = { x: 0, y: 0 };
   sprintHeld = false;
   wantInteract = false;
   wantFlashlight = false;
+  wantSignal = false;
   sensitivity = 0.0022;
+  private dragging = false;
+  private lastDragX = 0;
+  private lastDragY = 0;
 
   bind(target: HTMLElement, onLock?: () => void): () => void {
     const down = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       this.keys.add(e.code);
-      if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+      if (
+        ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(
+          e.code,
+        )
+      ) {
         e.preventDefault();
       }
     };
     const up = (e: KeyboardEvent) => this.keys.delete(e.code);
     const move = (e: MouseEvent) => {
       if (this.touchMode) return;
-      if (!this.locked) return;
-      this.applyLook(e.movementX, e.movementY);
+      if (this.locked) {
+        this.applyLook(e.movementX, e.movementY);
+        return;
+      }
+      if (!this.dragging) return;
+      this.applyLook(e.clientX - this.lastDragX, e.clientY - this.lastDragY);
+      this.lastDragX = e.clientX;
+      this.lastDragY = e.clientY;
     };
-    const click = () => {
+    const pointerDown = (e: PointerEvent) => {
       if (this.touchMode) return;
-      if (document.pointerLockElement !== target) {
+      if (e.button !== 0 && e.button !== 2) return;
+      this.dragging = true;
+      this.lastDragX = e.clientX;
+      this.lastDragY = e.clientY;
+      if (e.button === 0 && document.pointerLockElement !== target) {
         void target.requestPointerLock();
       }
     };
+    const pointerUp = () => {
+      this.dragging = false;
+    };
+    const context = (e: Event) => e.preventDefault();
     const lockChange = () => {
       this.locked = document.pointerLockElement === target;
-      if (this.locked) onLock?.();
+      if (this.locked) {
+        this.dragging = false;
+        onLock?.();
+      }
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("mousemove", move);
-    target.addEventListener("click", click);
+    window.addEventListener("pointerup", pointerUp);
+    target.addEventListener("pointerdown", pointerDown);
+    target.addEventListener("contextmenu", context);
     document.addEventListener("pointerlockchange", lockChange);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       window.removeEventListener("mousemove", move);
-      target.removeEventListener("click", click);
+      window.removeEventListener("pointerup", pointerUp);
+      target.removeEventListener("pointerdown", pointerDown);
+      target.removeEventListener("contextmenu", context);
       document.removeEventListener("pointerlockchange", lockChange);
     };
   }
 
   applyLook(dx: number, dy: number, scale = 1): void {
+    const lookY = this.invertY ? -dy : dy;
     this.yaw -= dx * this.sensitivity * scale;
-    this.pitch -= dy * this.sensitivity * scale;
-    this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch));
-  }
-
-  setLookAxis(x: number, y: number): void {
-    const mag = Math.hypot(x, y);
-    if (mag < 0.055) {
-      this.lookAxis.x = 0;
-      this.lookAxis.y = 0;
-      return;
-    }
-    const cap = Math.min(1, mag);
-    this.lookAxis.x = (x / mag) * cap;
-    this.lookAxis.y = (y / mag) * cap;
-  }
-
-  stepLook(dt: number): void {
-    const mag = Math.hypot(this.lookAxis.x, this.lookAxis.y);
-    if (mag < 0.04) return;
-    const t = Math.min(1, mag);
-    const curved = t * t * (0.35 + 0.65 * t);
-    const nx = this.lookAxis.x / mag;
-    const ny = this.lookAxis.y / mag;
-    const rate = 2.65 * (this.sensitivity / 0.0022);
-    this.yaw -= nx * curved * rate * dt;
-    this.pitch -= ny * curved * rate * dt;
-    this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch));
+    this.pitch -= lookY * this.sensitivity * scale;
+    this.pitch = Math.max(-1.15, Math.min(1.15, this.pitch));
   }
 
   setMoveAxis(x: number, y: number): void {
@@ -99,15 +105,28 @@ export class WalkerController {
     this.moveAxis.y = (y / mag) * cap;
   }
 
-  step(dt: number, role: Role, stamina: number): { sprinting: boolean; moving: boolean } {
-    const sprint =
-      this.sprintHeld || this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+  setLookAxis(x: number, y: number): void {
+    const mag = Math.hypot(x, y);
+    if (mag < 0.12) {
+      this.lookAxis.x = 0;
+      this.lookAxis.y = 0;
+      return;
+    }
+    const cap = Math.min(1, mag);
+    this.lookAxis.x = (x / mag) * cap;
+    this.lookAxis.y = (y / mag) * cap;
+  }
+
+  stepLook(dt: number): void {
+    if (this.lookAxis.x === 0 && this.lookAxis.y === 0) return;
+    const rate = 920;
+    this.applyLook(this.lookAxis.x * rate * dt, this.lookAxis.y * rate * dt);
+  }
+
+  step(dt: number, role: Role, stamina: number, extraWalls: WallSeg[] = []): { sprinting: boolean; moving: boolean } {
+    const sprint = this.sprintHeld || this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
     const speed =
-      role === "watcher"
-        ? WATCHER_FLY_SPEED
-        : sprint && stamina > 1
-          ? SPRINT_SPEED
-          : WALK_SPEED;
+      role === "watcher" ? WATCHER_FLY_SPEED : sprint && stamina > 1 ? SPRINT_SPEED : WALK_SPEED;
     let fwd = this.moveAxis.y;
     let strafe = this.moveAxis.x;
     if (this.keys.has("KeyW") || this.keys.has("ArrowUp")) fwd += 1;
@@ -120,16 +139,18 @@ export class WalkerController {
       strafe /= len;
     }
     const dx = Math.sin(this.yaw) * fwd + Math.cos(this.yaw) * strafe;
-    const dz = Math.cos(this.yaw) * fwd - Math.sin(this.yaw) * strafe;
+    const dz = -Math.cos(this.yaw) * fwd + Math.sin(this.yaw) * strafe;
     const wishX = dx * speed * dt;
     const wishZ = dz * speed * dt;
     if (role === "walker") {
-      const next = resolveMove(this.x, this.z, wishX, wishZ, PLAYER_RADIUS);
+      const walls = extraWalls.length ? WALLS.concat(extraWalls) : WALLS;
+      const next = resolveMove(this.x, this.z, wishX, wishZ, PLAYER_RADIUS, walls);
       this.x = next.x;
       this.z = next.z;
     } else {
-      this.x += wishX;
-      this.z += wishZ;
+      const next = resolveMove(this.x, this.z, wishX, wishZ, 0.22, WALLS);
+      this.x = next.x;
+      this.z = next.z;
     }
     return { sprinting: sprint && len > 0 && stamina > 1, moving: len > 0 };
   }
@@ -140,13 +161,17 @@ export class WalkerController {
     return true;
   }
 
-  consumeTap(kind: "interact" | "flashlight"): boolean {
+  consumeTap(kind: "interact" | "flashlight" | "signal"): boolean {
     if (kind === "interact" && this.wantInteract) {
       this.wantInteract = false;
       return true;
     }
     if (kind === "flashlight" && this.wantFlashlight) {
       this.wantFlashlight = false;
+      return true;
+    }
+    if (kind === "signal" && this.wantSignal) {
+      this.wantSignal = false;
       return true;
     }
     return false;

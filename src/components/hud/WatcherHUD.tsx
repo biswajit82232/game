@@ -13,11 +13,13 @@ export function WatcherHUD({
   onMode,
   onWarn,
   onHold,
+  touch = false,
 }: {
   snap: GameSnapshot;
   onMode: (mode: WatcherMode) => void;
   onWarn: () => void;
   onHold: (holding: boolean) => void;
+  touch?: boolean;
 }) {
   return (
     <div className="hud">
@@ -52,31 +54,45 @@ export function WatcherHUD({
             </button>
           ))}
         </div>
-        <div className="row" style={{ marginTop: 8, justifyContent: "flex-end" }}>
-          <button className="warn-btn" onClick={onWarn}>
-            WARN
-          </button>
-          <button
-            className="warn-btn"
-            onMouseDown={() => onHold(true)}
-            onMouseUp={() => onHold(false)}
-            onMouseLeave={() => onHold(false)}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              onHold(true);
-            }}
-            onTouchEnd={() => onHold(false)}
-          >
-            HOLD SIGNAL
-          </button>
-        </div>
-        {snap.symbolSolution && (
+        {snap.watcher.mode === "spirit" && (
           <p className="muted" style={{ marginTop: 8 }}>
-            SEQUENCE: {snap.symbolSolution.join(" · ").toUpperCase()}
+            SPIRIT: marks burn on the security wall.
           </p>
         )}
-        {snap.powerSafeSwitch >= 0 && (
-          <p className="muted">SAFE BREAKER: {snap.powerSafeSwitch + 1} (shape, not color)</p>
+        {snap.watcher.mode === "echo" && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            ECHO: afterimage of The Hollow.
+          </p>
+        )}
+        {snap.watcher.mode === "danger" && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            DANGER: gold breaker is safe. Red wakes it.
+          </p>
+        )}
+        {snap.watcher.mode === "normal" && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            NORMAL: grainy ping. Switch frequency to see.
+          </p>
+        )}
+        {!touch && (
+          <div className="row" style={{ marginTop: 8, justifyContent: "flex-end" }}>
+            <button className="warn-btn" onClick={onWarn}>
+              WARN
+            </button>
+            <button
+              className="warn-btn"
+              onMouseDown={() => onHold(true)}
+              onMouseUp={() => onHold(false)}
+              onMouseLeave={() => onHold(false)}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                onHold(true);
+              }}
+              onTouchEnd={() => onHold(false)}
+            >
+              HOLD SIGNAL
+            </button>
+          </div>
         )}
       </div>
     </div>

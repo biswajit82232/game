@@ -28,6 +28,8 @@ import {
   TRUST_START,
   WALK_SPEED,
   WATCHER_FLY_SPEED,
+  BEHIND_LOOK_ANGLE,
+  BEHIND_LOOK_HOLD,
 } from "../../shared/constants";
 import {
   DOORWAYS,
@@ -35,12 +37,14 @@ import {
   MAP_ROOMS,
   NOTES,
   OBJECTIVES,
+  WALLS,
+  doorBlockers,
   doorwayCenter,
   getRoomAt,
   getRoomById,
   resolveMove,
 } from "../../shared/map";
-import { clamp, dist2, randomSymbolSequence, trustLabel } from "../../shared/utils";
+import { clamp, dist2, randomSymbolSequence, shortestAngle, signalQuality, trustLabel } from "../../shared/utils";
 import { createMonster, tickMonster, type MonsterBrain } from "./monster";
 import { isSafeSwitch, validateSymbolPuzzle } from "./puzzles";
 
@@ -76,7 +80,7 @@ export class GameSession {
   overlay: string | null = null;
   subtitles: string | null = null;
   solo = false;
-  pendingChats: { from: Role | "system"; text: string }[] = [];
+  pendingChats: { from: Role | "system" | "eli" | "signal"; text: string }[] = [];
   stats = {
     itemsFound: 0,
     puzzlesSolved: 0,
@@ -90,17 +94,26 @@ export class GameSession {
   private warningWindow = false;
   private warnedThisWindow = false;
   private walkerLookedBack = false;
-  private lastWalkerYaw = 0;
+  private behindStartYaw = 0;
+  private lookBackHold = 0;
   private officeEntered = false;
   private ritualEntered = false;
   private coatUsed = false;
   private lastNoise: { x: number; y: number; z: number } | null = null;
   private simultaneousTimer = 0;
-  private botHintAt = 2.5;
-  private botKeyed = false;
-  private botGen = false;
+  private botKeyedAt = 0;
+  private botGenAt = 0;
+  private botOffice = false;
   private overlayUntil = 0;
   private subtitleUntil = 0;
+  private chaseScreamed = false;
+  private eliBeat = 0;
+  private signalCooldown = 0;
+  signalHeld = false;
+  private secretKind: "ritual" | "delay" | "children" | null = null;
+  private delaySecretDone = false;
+  private firstBehindOpen = false;
+  private botWarnAt = -1;
 
   constructor(solo = false) {
     this.solo = solo;
@@ -147,12 +160,15 @@ export class GameSession {
     this.objectives = OBJECTIVES.map((o) => ({ ...o, done: false }));
     this.items = this.spawnItems();
     if (!solo && Math.random() < 0.28) {
-      const secrets = [
-        "Do not tell the Walker about the red marks in the ritual room.",
-        "Wait 30 seconds before warning them if something stands behind them.",
-        "Convince the Walker to enter the children's room before the office.",
-      ];
-      this.secretObjective = secrets[Math.floor(Math.random() * secrets.length)]!;
+      const kinds = ["ritual", "delay", "children"] as const;
+      const kind = kinds[Math.floor(Math.random() * kinds.length)]!;
+      this.secretKind = kind;
+      const texts = {
+        ritual: "Do not tell the Walker about the red marks in the ritual room.",
+        delay: "Do not warn them the first time something stands behind them.",
+        children: "Convince the Walker to enter the children's room before the office.",
+      };
+      this.secretObjective = texts[kind];
     }
   }
 
@@ -166,6 +182,13 @@ export class GameSession {
         position: { x: kr.cx + 1.2, y: 0.9, z: kr.cz - 0.8 },
         taken: false,
         roomId: keyRoom,
+      },
+      {
+        id: "battery-0",
+        type: "battery",
+        position: { x: 2.2, y: 0.4, z: -1.4 },
+        taken: false,
+        roomId: "entrance",
       },
       {
         id: "battery-1",
@@ -254,7 +277,7 @@ export class GameSession {
       {
         id: "exit-panel",
         type: "exit",
-        position: { x: 50.4, y: 1.3, z: 0 },
+        position: { x: 43.6, y: 1.3, z: 0 },
         taken: false,
         roomId: "office",
       },
@@ -306,10 +329,10 @@ export class GameSession {
         mx = (dx / len) * max;
         mz = (dz / len) * max;
       }
-      const resolved = resolveMove(prev.x, prev.z, mx, mz, PLAYER_RADIUS);
+      const extra = doorBlockers(this.doors);
+      const resolved = resolveMove(prev.x, prev.z, mx, mz, PLAYER_RADIUS, WALLS.concat(extra));
       this.walker.position.x = resolved.x;
       this.walker.position.z = resolved.z;
-      this.lastWalkerYaw = this.walker.yaw;
       this.walker.yaw = yaw;
       this.walker.pitch = clamp(pitch, -1.2, 1.2);
       this.walker.sprinting = payload.sprinting && this.walker.stamina > 1;
@@ -317,18 +340,24 @@ export class GameSession {
         this.lastNoise = { x: resolved.x, y: 0, z: resolved.z };
       }
       if (this.monster.state.behindWalker) {
-        const delta = Math.abs(yaw - this.lastWalkerYaw);
-        if (delta > 0.9) this.walkerLookedBack = true;
+        const rear = this.behindStartYaw + Math.PI;
+        const err = Math.abs(shortestAngle(yaw, rear));
+        if (err < BEHIND_LOOK_ANGLE) this.lookBackHold += dt;
+        else this.lookBackHold = Math.max(0, this.lookBackHold - dt * 0.55);
+        if (this.lookBackHold >= BEHIND_LOOK_HOLD) this.walkerLookedBack = true;
       }
       const room = getRoomAt(resolved.x, resolved.z);
       if (room?.id === "office") {
         this.officeEntered = true;
         this.advanceObjective("obj-office");
       }
-      if (room?.id === "ritual") this.ritualEntered = true;
+      if (room?.id === "ritual") {
+        this.ritualEntered = true;
+        if (this.secretKind === "ritual") this.secretComplete = true;
+      }
       if (room?.id === "generator") this.advanceObjective("obj-generator");
-      if (room?.id === "children" && this.secretObjective?.includes("children")) {
-        this.secretComplete = true;
+      if (room?.id === "children") {
+        if (this.secretKind === "children" && !this.officeEntered) this.secretComplete = true;
       }
     } else {
       const prev = this.watcher.position;
@@ -342,8 +371,9 @@ export class GameSession {
         mx = (dx / len) * max;
         mz = (dz / len) * max;
       }
-      this.watcher.position.x = prev.x + mx;
-      this.watcher.position.z = prev.z + mz;
+      const resolved = resolveMove(prev.x, prev.z, mx, mz, 0.22, WALLS);
+      this.watcher.position.x = resolved.x;
+      this.watcher.position.z = resolved.z;
       this.watcher.position.y = 2.35;
       this.watcher.yaw = yaw;
       this.watcher.pitch = clamp(pitch, -1.4, 1.2);
@@ -372,11 +402,39 @@ export class GameSession {
     this.watcher.holdingSignal = holding;
   }
 
+  tuneSignal(holding: boolean): void {
+    this.signalHeld = holding;
+    if (holding) this.tryEliHint();
+  }
+
+  private tryEliHint(): void {
+    if (!this.solo || this.signalCooldown > 0) {
+      if (this.solo && this.signalCooldown > 0) {
+        this.pushEvent("static", "The Signal coughs static.", 0.2, "walker");
+      }
+      return;
+    }
+    this.signalCooldown = 9;
+    const room = this.getRoomId();
+    if (!this.generatorOn && (room === "generator" || room === "hallway")) {
+      this.botSay(`The safe breaker is number ${this.powerSafeSwitch + 1}. Leave the others. Please.`);
+    } else if (!this.puzzles.find((p) => p.id === "symbols")?.solved && (room === "security" || room === "reception")) {
+      this.botSay(`Sequence: ${this.symbolSolution.join(", ")}. I think. I hope.`);
+    } else if (!this.walker.inventory.includes("office-key")) {
+      this.botSay("The office key isn't in the office. Check storage, basement, children's room, or reception.");
+    } else if (room === "office" || room === "exit") {
+      this.botSay("I'll hold the exit open. Use the panel by the red door. Then run.");
+    } else {
+      this.botSay("Keep going east from the entrance. Generator is north of the hallway. Don't open anything that smiles.");
+    }
+  }
+
   warn(): void {
     this.stats.warningsGiven += 1;
     if (this.monster.state.behindWalker) {
       this.warnedThisWindow = true;
       this.trust = clamp(this.trust + 5, 0, 100);
+      if (this.secretKind === "delay" && this.firstBehindOpen) this.delaySecretDone = false;
       this.pushEvent("warning", "DO NOT TURN AROUND.", 0.6, "both");
       this.showSubtitle("WATCHER: DO NOT TURN AROUND.");
     } else if (this.coatUsed) {
@@ -427,6 +485,7 @@ export class GameSession {
     this.pushEvent("puzzle-fail", "Wrong sequence. Something in the walls notices.", 0.5, "both");
     this.lastNoise = { x: keypad.position.x, y: 0, z: keypad.position.z };
     this.monster.state.ai = "investigating";
+    if (this.solo) this.botKeyedAt = this.time + 0.8;
     return false;
   }
 
@@ -454,15 +513,20 @@ export class GameSession {
     } else if (item.type === "audio-log") {
       item.taken = true;
       this.stats.itemsFound += 1;
-      this.pushEvent("audio-log", "Recording: the observer channel is not a camera. It is a person.", 0.4, "both");
-      this.showSubtitle("AUDIO LOG: The observer channel is not a camera. It is a person.", 6);
+      this.pushEvent("audio-log", "Recording: Eli, observer channel, Site 07. The Hollow is not on tape.", 0.4, "both");
+      this.showSubtitle("AUDIO LOG: The observer channel is a person. His name is Eli.", 6);
     } else if (item.type === "switch") {
+      if (this.generatorOn) {
+        this.pushEvent("hint", "Power is already restored.", 0.1, "walker");
+        return;
+      }
       const index = Number(item.id.split("-")[1]);
       if (!isSafeSwitch(index, this.powerSafeSwitch)) {
         this.pushEvent("shock", "The breaker screams. Wrong one.", 0.7, "walker");
         this.lastNoise = { x: item.position.x, y: 0, z: item.position.z };
         this.monster.state.ai = "hunting";
         this.walker.health -= 8;
+        if (this.solo) this.botGenAt = this.time + 0.6;
         return;
       }
       this.puzzles.find((p) => p.id === "switches")!.solved = true;
@@ -550,6 +614,7 @@ export class GameSession {
 
     this.watcher.energy = clamp(this.watcher.energy + ENERGY_REGEN * dt, 0, MAX_ENERGY);
     this.watcher.modeCooldown = Math.max(0, this.watcher.modeCooldown - dt);
+    this.signalCooldown = Math.max(0, this.signalCooldown - dt);
 
     const result = tickMonster(
       this.monster,
@@ -564,14 +629,22 @@ export class GameSession {
       this.warningWindow = true;
       this.warnedThisWindow = false;
       this.walkerLookedBack = false;
+      this.behindStartYaw = this.walker.yaw;
+      this.lookBackHold = 0;
       this.stats.monsterEncounters += 1;
+      this.firstBehindOpen = true;
       this.pushEvent("behind", "It is standing behind them.", 0.8, "watcher");
-      if (this.secretObjective?.includes("Wait 30 seconds")) {
-        this.pushEvent("secret", this.secretObjective, 0.2, "watcher");
+      if (this.secretKind === "delay") {
+        this.pushEvent("secret", this.secretObjective ?? "", 0.2, "watcher");
       }
     }
     if (this.warningWindow && !this.monster.state.behindWalker) {
       this.warningWindow = false;
+      if (this.secretKind === "delay" && this.firstBehindOpen && !this.warnedThisWindow) {
+        this.delaySecretDone = true;
+        this.secretComplete = true;
+      }
+      this.firstBehindOpen = false;
       if (this.warnedThisWindow && this.walkerLookedBack) {
         this.trust = clamp(this.trust - 5, 0, 100);
         this.stats.warningsIgnored += 1;
@@ -582,10 +655,22 @@ export class GameSession {
     if (this.monster.state.behindWalker && this.walkerLookedBack) {
       result.caught = true;
     }
+    if (result.caught && this.time < 20 && !this.walkerLookedBack) {
+      result.caught = false;
+      this.monster.state.ai = "retreat";
+    }
     if (result.caught) {
       this.killWalker();
       return;
     }
+
+    const hunting = this.monster.state.ai === "hunting" || this.monster.state.ai === "attack";
+    if (hunting && this.monster.state.visibleToWalker && !this.chaseScreamed) {
+      this.chaseScreamed = true;
+      this.pushEvent("chase-scare", "IT SEES YOU.", 1, "both");
+      this.showSubtitle(this.solo ? "ELI: RUN. DON'T LOOK AT IT." : "DON'T TURN AROUND.", 3);
+    }
+    if (!hunting) this.chaseScreamed = false;
 
     this.updateNearby();
     this.tickHorror(dt);
@@ -598,38 +683,55 @@ export class GameSession {
     this.watcher.position.x = this.walker.position.x;
     this.watcher.position.z = this.walker.position.z;
     this.watcher.position.y = 2.35;
-    this.watcher.holdingSignal = true;
     this.watcher.energy = MAX_ENERGY;
     this.watcher.mode = "spirit";
-    if (this.monster.state.behindWalker && !this.warnedThisWindow) {
-      this.warn();
-      this.pendingChats.push({ from: "watcher", text: "DO NOT TURN AROUND." });
-    }
     const roomId = this.getRoomId();
-    if (this.time >= this.botHintAt && this.botHintAt > 0) {
-      this.botHintAt = -1;
-      this.pendingChats.push({
-        from: "watcher",
-        text: "I'm with you. I'll warn you if it stands behind you.",
-      });
+    this.watcher.holdingSignal = roomId === "office" || roomId === "exit";
+    if (this.monster.state.behindWalker && !this.warnedThisWindow && this.botWarnAt < 0) {
+      this.botWarnAt = this.time + 1.1 + Math.random() * 1.1;
     }
-    if (roomId === "security" && !this.botKeyed && !this.puzzles.find((p) => p.id === "symbols")?.solved) {
-      this.botKeyed = true;
-      this.pendingChats.push({
-        from: "watcher",
-        text: `Sequence: ${this.symbolSolution.join(", ")}.`,
-      });
+    if (!this.monster.state.behindWalker) this.botWarnAt = -1;
+    if (this.botWarnAt > 0 && this.time >= this.botWarnAt && this.monster.state.behindWalker) {
+      this.botWarnAt = -1;
+      this.warn();
     }
-    if (roomId === "generator" && !this.botGen && !this.generatorOn) {
-      this.botGen = true;
-      this.pendingChats.push({
-        from: "watcher",
-        text: `Safe breaker is number ${this.powerSafeSwitch + 1}.`,
-      });
+    if (this.eliBeat === 0 && this.time > 0.6) {
+      this.eliBeat = 1;
+      this.botSay("Can you hear me?");
+    } else if (this.eliBeat === 1 && this.time > 3.4) {
+      this.eliBeat = 2;
+      this.botSay("I've been trapped here for three days.");
+    } else if (this.eliBeat === 2 && this.time > 6.8) {
+      this.eliBeat = 3;
+      this.botSay("Name's Eli. Follow my instructions.");
+    } else if (this.eliBeat === 3 && this.time > 10.2) {
+      this.eliBeat = 4;
+      this.botSay("Hold the Signal if you need me. And whatever happens... don't turn around.");
+    }
+    if (roomId === "security" && !this.puzzles.find((p) => p.id === "symbols")?.solved && this.time >= this.botKeyedAt) {
+      this.botKeyedAt = this.time + 18;
+      if (Math.random() < 0.18) {
+        this.botSay("The lock... wait. I think I have it. No. Look at the wall. I might be wrong.");
+      } else {
+        this.botSay(`Okay. The lock. Sequence: ${this.symbolSolution.join(", ")}.`);
+      }
+    }
+    if (roomId === "generator" && !this.generatorOn && this.time >= this.botGenAt) {
+      this.botGenAt = this.time + 16;
+      this.botSay(`I can see the breakers. Safe one is number ${this.powerSafeSwitch + 1}. I think.`);
+    }
+    if (roomId === "office" && !this.botOffice) {
+      this.botOffice = true;
+      this.botSay("I'll hold the exit signal. Use the panel by the red door. Then we both leave. Supposedly.");
     }
   }
 
-  drainChats(): { from: Role | "system"; text: string }[] {
+  private botSay(text: string): void {
+    this.pendingChats.push({ from: "eli", text });
+    this.showSubtitle(`ELI: ${text}`, 6);
+  }
+
+  drainChats(): { from: Role | "system" | "eli" | "signal"; text: string }[] {
     const c = this.pendingChats;
     this.pendingChats = [];
     return c;
@@ -654,31 +756,39 @@ export class GameSession {
     this.horrorTimer -= dt;
     if (this.horrorTimer > 0) return;
     this.horrorTimer = 11 + Math.random() * 16;
+    if (this.monster.state.behindWalker) return;
+    const room = this.getRoomId();
     const roll = Math.random();
-    if (roll < 0.12) {
-      const light = this.lights[Math.floor(Math.random() * this.lights.length)]!;
-      light.on = false;
-      this.pushEvent("lights-out", "A light dies.", 0.4, "walker");
-    } else if (roll < 0.2) {
+    if ((room === "children" || room === "basement") && roll < 0.45) {
       this.pushEvent("child-laugh", "A child's laugh, far away. There are no children here.", 0.45, "both");
       this.showSubtitle("A child's laugh, far away.");
-    } else if (roll < 0.28) {
+      return;
+    }
+    if (room === "office" && roll < 0.4) {
       this.pushEvent("phone-ring", "A phone rings in an empty office. The voicemail is a pizza coupon.", 0.25, "walker");
       this.showSubtitle("Automated voice: Your pizza will arrive in twenty minutes.");
-    } else if (roll < 0.36) {
-      this.pushEvent("silhouette-flash", "", 0.7, "walker");
-    } else if (roll < 0.44) {
-      this.pushEvent("fake-message", "RUN.", 0.5, "walker");
-    } else if (roll < 0.52) {
-      this.pushEvent("watcher-distort", "Signal fracture.", 0.55, "watcher");
-    } else if (roll < 0.6 && !this.coatUsed) {
+      return;
+    }
+    if (room === "hallway" && roll < 0.35 && !this.coatUsed) {
       this.coatUsed = true;
       this.pushEvent("coat-scare", "Something in the hallway. Wait—it's a coat.", 0.35, "watcher");
-    } else if (roll < 0.68) {
+      return;
+    }
+    if (roll < 0.14) {
+      const light = this.lights.find((l) => l.roomId === room) ?? this.lights[Math.floor(Math.random() * this.lights.length)]!;
+      light.on = false;
+      this.pushEvent("lights-out", "A light dies.", 0.4, "walker");
+    } else if (roll < 0.26) {
+      this.pushEvent("silhouette-flash", "", 0.7, "walker");
+    } else if (roll < 0.36 && this.trust < 70) {
+      this.pushEvent("fake-message", "RUN.", 0.5, "walker");
+    } else if (roll < 0.46) {
+      this.pushEvent("watcher-distort", "Signal fracture.", 0.55, "watcher");
+    } else if (roll < 0.56) {
       this.pushEvent("vending-noise", "A vending machine detonates a can. Everyone jumps. It is only soda.", 0.3, "both");
-    } else if (roll < 0.76) {
+    } else if (roll < 0.66) {
       this.pushEvent("whisper", "A whisper uses the Walker's voice.", 0.4, "watcher");
-    } else if (roll < 0.84) {
+    } else if (roll < 0.8) {
       const door = this.doors.find((d) => !d.locked && d.open);
       if (door) {
         door.open = false;
@@ -710,7 +820,15 @@ export class GameSession {
       const d = dist2(w.x, w.z, c.x, c.z);
       if (d > INTERACT_RANGE * INTERACT_RANGE) continue;
       if (!best || d < best.d) {
-        const prompt = door.locked ? "[E] Locked Door" : door.open ? "[E] Close Door" : "[E] Open Door";
+        const prompt = door.locked
+          ? def.isExit
+            ? "[E] Exit Mechanism"
+            : def.needsKey && this.walker.inventory.includes(def.needsKey)
+              ? "[E] Unlock Door"
+              : "[E] Locked Door"
+          : door.open
+            ? "[E] Close Door"
+            : "[E] Open Door";
         best = { id: door.id, prompt, d };
       }
     }
@@ -751,12 +869,14 @@ export class GameSession {
   }
 
   private pickEnding(): GameEndPayload["ending"] {
-    if (this.ritualEntered && this.secretObjective?.includes("ritual") && this.secretComplete) {
+    if (this.secretKind === "ritual" && this.ritualEntered && this.secretComplete) {
       this.trust = clamp(this.trust - 25, 0, 100);
       return "betrayal";
     }
-    if (this.ritualEntered && (!this.officeEntered || this.trust < 35)) return "betrayal";
-    if (this.stats.notesRead >= 4 && this.trust >= 70 && Math.random() < 0.35) return "loop";
+    if (this.secretKind === "children" && this.secretComplete && this.trust < 50) return "betrayal";
+    if (this.secretKind === "delay" && this.delaySecretDone && this.trust < 40) return "betrayal";
+    if (this.ritualEntered && this.trust < 35) return "betrayal";
+    if (this.stats.notesRead >= 4 && this.trust >= 70) return "loop";
     if (this.trust < 25) return "hollow";
     return "escape";
   }
@@ -784,11 +904,11 @@ export class GameSession {
       },
       hollow: {
         title: "THE HOLLOW",
-        body: "The Walker steps into the night. The Watcher's signal ends mid-sentence.",
+        body: "The Walker steps into the night. The Watcher's signal ends mid-sentence. Something else answers.",
       },
       loop: {
         title: "YOU NEVER LEFT.",
-        body: "The lobby looks the same. The title on the wall has changed.",
+        body: "The lobby is the same. The title on the wall has changed. Eli is already talking.",
       },
     };
     const t = titles[ending];
@@ -872,6 +992,8 @@ export class GameSession {
       overlay: role === "walker" ? this.overlay : null,
       subtitles: this.subtitles,
       solo: this.solo,
+      signalHeld: this.signalHeld,
+      signalQuality: signalQuality(this.trust),
     };
   }
 }

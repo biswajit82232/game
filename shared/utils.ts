@@ -31,6 +31,20 @@ export function dist2(ax: number, az: number, bx: number, bz: number): number {
   return dx * dx + dz * dz;
 }
 
+/** Smallest signed angle from `b` to `a`, in (-PI, PI]. */
+export function shortestAngle(a: number, b: number): number {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d <= -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+export function signalQuality(trust: number): "STABLE" | "FRACTURED" | "DEAD" {
+  if (trust >= 60) return "STABLE";
+  if (trust >= 35) return "FRACTURED";
+  return "DEAD";
+}
+
 export function trustLabel(trust: number): string {
   if (trust >= 85) return "UNSHAKEN";
   if (trust >= 60) return "STEADY";

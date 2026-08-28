@@ -40,7 +40,7 @@ export interface ServerToClientEvents {
   "game:snapshot": (snapshot: GameSnapshot) => void;
   "game:event": (payload: { type: string; message: string; intensity?: number }) => void;
   "game:chat": (payload: {
-    from: Role | "system";
+    from: Role | "system" | "eli" | "signal";
     text: string;
     fake?: boolean;
   }) => void;

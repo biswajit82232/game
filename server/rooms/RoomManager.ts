@@ -232,6 +232,7 @@ export class RoomManager {
         connected: p.connected,
         name: p.isBot ? "AI WATCHER" : i === 0 || p.role === "walker" ? "PLAYER 1" : "PLAYER 2",
       })),
+      solo: room.solo,
     };
   }
 

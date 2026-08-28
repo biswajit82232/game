@@ -11,6 +11,8 @@ export interface GameSettings {
   fullscreen: boolean;
   subtitles: boolean;
   reduceMotion: boolean;
+  invertLookY: boolean;
+  gyroLook: boolean;
 }
 
 const KEY = "dta-settings";
@@ -36,12 +38,17 @@ export const DEFAULT_SETTINGS: GameSettings = {
   fullscreen: false,
   subtitles: true,
   reduceMotion: false,
+  invertLookY: false,
+  gyroLook: false,
 };
 
 export function loadSettings(): GameSettings {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS, graphics: defaultGraphics() };
+    if (!raw) {
+      const graphics = defaultGraphics();
+      return { ...DEFAULT_SETTINGS, graphics, grain: graphics === "high" };
+    }
     return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
   } catch {
     return { ...DEFAULT_SETTINGS, graphics: defaultGraphics() };

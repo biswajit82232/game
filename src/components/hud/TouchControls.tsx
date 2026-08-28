@@ -14,6 +14,7 @@ function analogFrom(originX: number, originY: number, x: number, y: number, radi
 
 export function TouchControls({
   role,
+  solo = false,
   prompt,
   onMove,
   onLookAxis,
@@ -23,9 +24,11 @@ export function TouchControls({
   onPause,
   onWarn,
   onHold,
+  onRadio,
   onGyro,
 }: {
   role: Role;
+  solo?: boolean;
   prompt: string | null;
   onMove: (x: number, y: number) => void;
   onLookAxis: (x: number, y: number) => void;
@@ -35,6 +38,7 @@ export function TouchControls({
   onPause: () => void;
   onWarn: () => void;
   onHold: (held: boolean) => void;
+  onRadio?: (held: boolean) => void;
   onGyro?: () => void;
 }) {
   const moveRef = useRef<HTMLDivElement>(null);
@@ -44,27 +48,34 @@ export function TouchControls({
   const moveOrigin = useRef<{ x: number; y: number; id: number } | null>(null);
   const lookOrigin = useRef<{ x: number; y: number; id: number } | null>(null);
 
-  const place = (el: HTMLDivElement | null, clientX: number, clientY: number, nx: number, ny: number) => {
-    if (!el) return;
-    el.style.opacity = "1";
-    el.style.transform = `translate(${nx * 42}px, ${-ny * 42}px)`;
-    const stick = el.parentElement;
-    const zone = stick?.parentElement;
-    if (stick && zone) {
-      const rect = zone.getBoundingClientRect();
-      stick.style.left = `${clientX - rect.left - 70}px`;
-      stick.style.top = `${clientY - rect.top - 70}px`;
-      stick.style.bottom = "auto";
-      stick.style.right = "auto";
-      stick.classList.add("is-active");
-    }
+  const placeStick = (
+    wrap: HTMLDivElement | null,
+    knob: HTMLDivElement | null,
+    nx: number,
+    ny: number,
+    origin: { x: number; y: number },
+  ) => {
+    if (!knob || !wrap) return;
+    knob.style.transform = `translate(${nx * 36}px, ${-ny * 36}px)`;
+    const zone = wrap.parentElement;
+    if (!zone) return;
+    const rect = zone.getBoundingClientRect();
+    const half = wrap.offsetWidth / 2;
+    wrap.style.left = `${origin.x - rect.left - half}px`;
+    wrap.style.top = `${origin.y - rect.top - half}px`;
+    wrap.style.bottom = "auto";
+    wrap.style.right = "auto";
+    wrap.classList.add("is-active");
   };
 
-  const resetStick = (kind: "move" | "look") => {
-    const knob = kind === "move" ? moveKnob.current : lookKnob.current;
-    const wrap = kind === "move" ? moveRef.current : lookRef.current;
+  const resetStick = (wrap: HTMLDivElement | null, knob: HTMLDivElement | null) => {
     if (knob) knob.style.transform = "translate(0, 0)";
-    wrap?.classList.remove("is-active");
+    if (!wrap) return;
+    wrap.classList.remove("is-active");
+    wrap.style.removeProperty("left");
+    wrap.style.removeProperty("top");
+    wrap.style.removeProperty("bottom");
+    wrap.style.removeProperty("right");
   };
 
   const onMoveDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -73,20 +84,20 @@ export function TouchControls({
     e.currentTarget.setPointerCapture(e.pointerId);
     moveOrigin.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
     onMove(0, 0);
-    place(moveKnob.current, e.clientX, e.clientY, 0, 0);
+    placeStick(moveRef.current, moveKnob.current, 0, 0, moveOrigin.current);
   };
   const onMoveDrag = (e: PointerEvent<HTMLDivElement>) => {
     const o = moveOrigin.current;
     if (!o || o.id !== e.pointerId) return;
-    const a = analogFrom(o.x, o.y, e.clientX, e.clientY, 56);
+    const a = analogFrom(o.x, o.y, e.clientX, e.clientY, 58);
     onMove(a.x, a.y);
-    place(moveKnob.current, o.x, o.y, a.x, a.y);
+    placeStick(moveRef.current, moveKnob.current, a.x, a.y, o);
   };
   const onMoveUp = (e: PointerEvent<HTMLDivElement>) => {
     if (moveOrigin.current?.id !== e.pointerId) return;
     moveOrigin.current = null;
     onMove(0, 0);
-    resetStick("move");
+    resetStick(moveRef.current, moveKnob.current);
   };
 
   const onLookDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -95,20 +106,20 @@ export function TouchControls({
     e.currentTarget.setPointerCapture(e.pointerId);
     lookOrigin.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
     onLookAxis(0, 0);
-    place(lookKnob.current, e.clientX, e.clientY, 0, 0);
+    placeStick(lookRef.current, lookKnob.current, 0, 0, lookOrigin.current);
   };
   const onLookDrag = (e: PointerEvent<HTMLDivElement>) => {
     const o = lookOrigin.current;
     if (!o || o.id !== e.pointerId) return;
-    const a = analogFrom(o.x, o.y, e.clientX, e.clientY, 56);
+    const a = analogFrom(o.x, o.y, e.clientX, e.clientY, 58);
     onLookAxis(a.x, a.y);
-    place(lookKnob.current, o.x, o.y, a.x, a.y);
+    placeStick(lookRef.current, lookKnob.current, a.x, a.y, o);
   };
   const onLookUp = (e: PointerEvent<HTMLDivElement>) => {
     if (lookOrigin.current?.id !== e.pointerId) return;
     lookOrigin.current = null;
     onLookAxis(0, 0);
-    resetStick("look");
+    resetStick(lookRef.current, lookKnob.current);
   };
 
   const hold = useCallback(
@@ -140,7 +151,7 @@ export function TouchControls({
         onPointerUp={onMoveUp}
         onPointerCancel={onMoveUp}
       >
-        <div ref={moveRef} className="touch-stick touch-stick-float">
+        <div ref={moveRef} className="touch-stick touch-stick-move">
           <div ref={moveKnob} className="touch-knob" />
           <span className="touch-stick-label">MOVE</span>
         </div>
@@ -152,22 +163,31 @@ export function TouchControls({
         onPointerUp={onLookUp}
         onPointerCancel={onLookUp}
       >
-        <div ref={lookRef} className="touch-stick touch-stick-float">
+        <div ref={lookRef} className="touch-stick touch-stick-look">
           <div ref={lookKnob} className="touch-knob" />
           <span className="touch-stick-label">LOOK</span>
         </div>
       </div>
+      {role === "walker" && (
+        <div className="touch-left-actions">
+          <button type="button" className="touch-btn touch-btn-hold" {...hold(onSprint)}>
+            RUN
+          </button>
+          {solo && onRadio && (
+            <button type="button" className="touch-btn touch-btn-hold" {...hold(onRadio)}>
+              RADIO
+            </button>
+          )}
+        </div>
+      )}
       <div className="touch-actions">
         {role === "walker" ? (
           <>
-            <button type="button" className={`touch-btn${prompt ? " touch-btn-hot" : ""}`} onPointerDown={tap(onInteract)}>
+            <button type="button" className={`touch-btn touch-btn-use${prompt ? " touch-btn-hot" : ""}`} onPointerDown={tap(onInteract)}>
               USE
             </button>
             <button type="button" className="touch-btn" onPointerDown={tap(onFlashlight)}>
               LIGHT
-            </button>
-            <button type="button" className="touch-btn touch-btn-hold" {...hold(onSprint)}>
-              RUN
             </button>
           </>
         ) : (
@@ -180,15 +200,17 @@ export function TouchControls({
             </button>
           </>
         )}
+      </div>
+      <div className="touch-top-right">
+        <button type="button" className="touch-pause" onPointerDown={tap(onPause)}>
+          PAUSE
+        </button>
         {onGyro && (
-          <button type="button" className="touch-btn touch-btn-small" onPointerDown={tap(onGyro)}>
+          <button type="button" className="touch-pause" onPointerDown={tap(onGyro)}>
             GYRO
           </button>
         )}
       </div>
-      <button type="button" className="touch-pause" onPointerDown={tap(onPause)}>
-        PAUSE
-      </button>
     </div>
   );
 }

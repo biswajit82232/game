@@ -34,6 +34,8 @@ export function SettingsPanel({
         <Toggle label="FILM GRAIN" on={settings.grain} onToggle={() => set({ grain: !settings.grain })} />
         <Toggle label="SUBTITLES" on={settings.subtitles} onToggle={() => set({ subtitles: !settings.subtitles })} />
         <Toggle label="REDUCE MOTION" on={settings.reduceMotion} onToggle={() => set({ reduceMotion: !settings.reduceMotion })} />
+        <Toggle label="INVERT LOOK Y" on={settings.invertLookY} onToggle={() => set({ invertLookY: !settings.invertLookY })} />
+        <Toggle label="GYRO LOOK (PHONE)" on={settings.gyroLook} onToggle={() => set({ gyroLook: !settings.gyroLook })} />
         <Toggle
           label="FULLSCREEN"
           on={settings.fullscreen}

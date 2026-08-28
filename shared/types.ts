@@ -75,6 +75,7 @@ export interface RoomPublic {
   phase: GamePhase;
   players: PlayerPublic[];
   hostId: string;
+  solo: boolean;
 }
 
 export interface WalkerState {
@@ -147,9 +148,11 @@ export interface NoteContent {
   body: string;
 }
 
+export type ChatFrom = Role | "system" | "eli" | "signal";
+
 export interface ChatMessage {
   id: string;
-  from: Role | "system";
+  from: ChatFrom;
   text: string;
   at: number;
   fake?: boolean;
@@ -190,6 +193,8 @@ export interface GameSnapshot {
   overlay: string | null;
   subtitles: string | null;
   solo: boolean;
+  signalHeld: boolean;
+  signalQuality: "STABLE" | "FRACTURED" | "DEAD";
 }
 
 export interface GameEndPayload {
@@ -201,3 +206,10 @@ export interface GameEndPayload {
 
 export const SYMBOLS = ["triangle", "circle", "square", "diamond"] as const;
 export type SymbolId = (typeof SYMBOLS)[number];
+
+export const SYMBOL_GLYPH: Record<SymbolId, string> = {
+  triangle: "▲",
+  circle: "●",
+  square: "■",
+  diamond: "◆",
+};

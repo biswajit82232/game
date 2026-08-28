@@ -64,6 +64,7 @@ function startGame(code: string): void {
   for (const p of room.players) {
     if (p.isBot) continue;
     io.to(p.socketId).emit("game:started", { role: p.role });
+    io.to(p.socketId).emit("game:snapshot", session.snapshotFor(p.role));
   }
   emitRoom(code);
 
@@ -85,6 +86,13 @@ function startGame(code: string): void {
     }
     const humansOnline = r.players.some((p) => !p.isBot && p.connected);
     if (!humansOnline) return;
+    if (!s.bothIntroDone()) {
+      for (const p of r.players) {
+        if (!p.connected || p.isBot) continue;
+        io.to(p.socketId).emit("game:snapshot", s.snapshotFor(p.role));
+      }
+      return;
+    }
     s.tick(TICK_DT);
     const events = s.drainEvents();
     const chats = s.drainChats();
@@ -301,8 +309,14 @@ io.on("connection", (socket) => {
   socket.on("player:holdSignal", ({ holding }) => {
     const found = rooms.getPlayer(socket.id);
     const session = found ? sessions.get(found.room.code) : undefined;
-    if (!found || !session || found.player.role !== "watcher") return;
-    session.holdSignal(holding);
+    if (!found || !session) return;
+    if (found.player.role === "watcher") {
+      session.holdSignal(holding);
+      return;
+    }
+    if (session.solo && found.player.role === "walker") {
+      session.tuneSignal(holding);
+    }
   });
 
   socket.on("disconnect", () => {

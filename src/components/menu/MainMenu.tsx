@@ -3,19 +3,21 @@ import { HorrorButton } from "../../ui/HorrorButton";
 const DUST = Array.from({ length: 28 }, (_, i) => i);
 
 export function MainMenu({
-  onCreate,
-  onJoin,
   onSolo,
+  onFriend,
   onHow,
   onSettings,
   loopTitle,
+  busy = false,
+  error = null,
 }: {
-  onCreate: () => void;
-  onJoin: () => void;
   onSolo: () => void;
+  onFriend: () => void;
   onHow: () => void;
   onSettings: () => void;
   loopTitle?: boolean;
+  busy?: boolean;
+  error?: string | null;
 }) {
   return (
     <div className="screen">
@@ -38,17 +40,21 @@ export function MainMenu({
       </div>
       <div className="menu-overlay">
         <h1 className="game-title">{loopTitle ? "YOU NEVER LEFT." : "DON'T TURN AROUND"}</h1>
-        <p className="game-sub">Two players. One monster. Trust nobody.</p>
+        <p className="game-sub">One monster. One signal. Trust nobody.</p>
         <div className="menu-col">
-          <HorrorButton onClick={onSolo}>PLAY ALONE</HorrorButton>
-          <HorrorButton onClick={onCreate}>CREATE ROOM</HorrorButton>
-          <HorrorButton onClick={onJoin}>JOIN ROOM</HorrorButton>
-          <HorrorButton variant="ghost" onClick={onHow}>
+          <HorrorButton onClick={onSolo} disabled={busy}>
+            {busy ? "STARTING…" : "PLAY SOLO"}
+          </HorrorButton>
+          <HorrorButton onClick={onFriend} disabled={busy}>
+            PLAY WITH FRIEND
+          </HorrorButton>
+          <HorrorButton variant="ghost" onClick={onHow} disabled={busy}>
             HOW TO PLAY
           </HorrorButton>
-          <HorrorButton variant="ghost" onClick={onSettings}>
+          <HorrorButton variant="ghost" onClick={onSettings} disabled={busy}>
             SETTINGS
           </HorrorButton>
+          {error && <p className="error">{error}</p>}
         </div>
       </div>
     </div>

@@ -14,8 +14,8 @@ export const STAMINA_DRAIN = 22;
 export const STAMINA_REGEN = 14;
 
 export const MAX_BATTERY = 100;
-export const BATTERY_DRAIN = 3.2;
-export const BATTERY_PICKUP = 45;
+export const BATTERY_DRAIN = 1.45;
+export const BATTERY_PICKUP = 50;
 
 export const MAX_ENERGY = 100;
 export const MODE_SWITCH_COST = 18;
@@ -29,5 +29,7 @@ export const ROOM_CODE_LENGTH = 5;
 
 export const BEHIND_EVENT_DURATION = 4.2;
 export const BEHIND_EVENT_MIN_INTERVAL = 18;
+export const BEHIND_LOOK_ANGLE = 0.44;
+export const BEHIND_LOOK_HOLD = 0.4;
 
 export const TRUST_START = 100;
