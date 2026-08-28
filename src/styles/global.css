@@ -154,6 +154,15 @@ input {
   width: min(360px, 92vw);
 }
 
+.menu-dedication {
+  margin-top: auto;
+  padding-top: 28px;
+  color: var(--muted);
+  letter-spacing: 0.18em;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
 .hbtn {
   appearance: none;
   border: 1px solid var(--line);

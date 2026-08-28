@@ -56,6 +56,7 @@ export function MainMenu({
           </HorrorButton>
           {error && <p className="error">{error}</p>}
         </div>
+        <p className="menu-dedication">Priti's Wish ❤️</p>
       </div>
     </div>
   );
