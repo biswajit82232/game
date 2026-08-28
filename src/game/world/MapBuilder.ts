@@ -38,15 +38,15 @@ export function buildWorld(quality: "low" | "high"): WorldHandles {
   const lights = new Map<string, THREE.PointLight>();
   const glyphs: THREE.Mesh[] = [];
   const lit = quality === "high";
-  const floorTex = noiseTexture(256, "#16181c", "#000000", lit ? 900 : 280);
+  const floorTex = noiseTexture(256, "#3a3d44", "#1a1c20", lit ? 700 : 220);
   floorTex.repeat.set(18, 18);
-  const wallTex = noiseTexture(256, "#1c2026", "#0a0b0d", lit ? 700 : 220);
+  const wallTex = noiseTexture(256, "#45423c", "#1c1a16", lit ? 500 : 180);
   wallTex.repeat.set(2, 1);
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x6e6a64, map: wallTex, roughness: 0.94, metalness: 0.03 });
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0x5c5852, map: floorTex, roughness: 0.96 });
-  const ceilMat = new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 1 });
-  const trim = new THREE.MeshStandardMaterial({ color: 0x2a2420, roughness: 0.8 });
-  const wood = new THREE.MeshStandardMaterial({ color: 0x3a2a1c, roughness: 0.85 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x9a948c, map: wallTex, roughness: 0.9, metalness: 0.02 });
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x8a847c, map: floorTex, roughness: 0.92 });
+  const ceilMat = new THREE.MeshStandardMaterial({ color: 0x2a2c32, roughness: 1 });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x4a4038, roughness: 0.8 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x5a4434, roughness: 0.82 });
 
   let minX = Infinity;
   let maxX = -Infinity;
@@ -66,7 +66,6 @@ export function buildWorld(quality: "low" | "high"): WorldHandles {
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(fw, fd), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(cx, 0, cz);
-  floor.receiveShadow = true;
   group.add(floor);
 
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(fw, fd), ceilMat);
@@ -74,7 +73,7 @@ export function buildWorld(quality: "low" | "high"): WorldHandles {
   ceil.position.set(cx, WALL_HEIGHT, cz);
   group.add(ceil);
 
-  const hallMat = new THREE.MeshStandardMaterial({ color: 0x4a4640, roughness: 0.95 });
+  const hallMat = new THREE.MeshStandardMaterial({ color: 0x6e6860, roughness: 0.92 });
   for (const f of CORRIDOR_FLOORS) {
     const strip = new THREE.Mesh(new THREE.PlaneGeometry(f.w, f.d), hallMat);
     strip.rotation.x = -Math.PI / 2;
@@ -108,7 +107,12 @@ export function buildWorld(quality: "low" | "high"): WorldHandles {
 
   for (const room of MAP_ROOMS) {
     addFurniture(group, room.id, room.cx, room.cz, wood, trim, lit, glyphs);
-    const light = new THREE.PointLight(tints[room.id] ?? 0xbba988, room.id === "entrance" ? 1.35 : lit ? 0.42 : 0.28, lit ? 16 : 11, 2);
+    const light = new THREE.PointLight(
+      tints[room.id] ?? 0xbba988,
+      room.id === "entrance" ? 28 : lit ? 14 : 12,
+      20,
+      1.55,
+    );
     light.position.set(room.cx, 2.55, room.cz);
     group.add(light);
     lights.set(`light-${room.id}`, light);
@@ -178,7 +182,7 @@ export function syncLights(handles: WorldHandles, lights: LightState[], generato
   for (const l of lights) {
     const light = handles.lights.get(l.id);
     if (!light) continue;
-    light.intensity = l.on ? (generatorOn ? 1.45 : 0.62) : generatorOn ? 0.12 : 0.16;
+    light.intensity = l.on ? (generatorOn ? 40 : 22) : generatorOn ? 6 : 8;
   }
 }
 
