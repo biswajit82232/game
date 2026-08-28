@@ -1,4 +1,4 @@
-import type { GameSettings } from "./settings";
+import { DEFAULT_SETTINGS, type GameSettings } from "./settings";
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
@@ -129,18 +129,7 @@ let audio: AudioManager | null = null;
 
 export function getAudio(settings?: GameSettings): AudioManager {
   if (!audio && settings) audio = new AudioManager(settings);
-  if (!audio) audio = new AudioManager({
-    master: 0.8,
-    music: 0.45,
-    sfx: 0.7,
-    sensitivity: 0.22,
-    graphics: "high",
-    shake: true,
-    grain: true,
-    fullscreen: false,
-    subtitles: true,
-    reduceMotion: false,
-  });
+  if (!audio) audio = new AudioManager({ ...DEFAULT_SETTINGS });
   if (settings) audio.applySettings(settings);
   return audio;
 }

@@ -21,7 +21,9 @@ A round lasts about 10–20 minutes: restore power, find the office key, solve t
 - Cooperative puzzles (symbol keypad, safe breaker, simultaneous exit)
 - Randomized key location, puzzle codes, and horror events
 - Text chat (WebRTC voice is stubbed for later)
-- Settings persisted in `localStorage` (volumes, sensitivity, graphics, grain, shake, subtitles, motion)
+- Reconnect after a brief drop: in-game rooms stay alive for 90 seconds and the client rejoins automatically
+- Pause freezes local movement; notes stay on screen long enough to read
+- Mobile defaults to low graphics; dual-stick origins stay inside the touch zones
 
 ## Tech stack
 
@@ -99,8 +101,9 @@ Do **not** use GitHub Pages. This game needs a Node.js process and WebSockets (S
 2. Go to [https://dashboard.render.com](https://dashboard.render.com) and sign in with GitHub.
 3. **New + → Web Service →** select `biswajit82232/game`.
 4. Use:
-   - **Build command:** `npm install && npm run build`
+   - **Build command:** `npm install --include=dev && npm run build`
    - **Start command:** `npm start`
+   - **Health check:** `/health`
    - **Instance:** Free
 5. Deploy. Your public URL will look like `https://dont-turn-around.onrender.com`.
 6. Open that URL on two phones or browsers, create a room, and play.

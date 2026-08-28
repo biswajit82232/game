@@ -40,5 +40,8 @@ export function trustLabel(trust: number): string {
 }
 
 export function normalizeCode(code: string): string {
-  return code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return String(code ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 }

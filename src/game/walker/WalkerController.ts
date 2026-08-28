@@ -11,6 +11,7 @@ export class WalkerController {
   locked = false;
   touchMode = false;
   moveAxis = { x: 0, y: 0 };
+  lookAxis = { x: 0, y: 0 };
   sprintHeld = false;
   wantInteract = false;
   wantFlashlight = false;
@@ -61,9 +62,34 @@ export class WalkerController {
     this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch));
   }
 
+  setLookAxis(x: number, y: number): void {
+    const mag = Math.hypot(x, y);
+    if (mag < 0.055) {
+      this.lookAxis.x = 0;
+      this.lookAxis.y = 0;
+      return;
+    }
+    const cap = Math.min(1, mag);
+    this.lookAxis.x = (x / mag) * cap;
+    this.lookAxis.y = (y / mag) * cap;
+  }
+
+  stepLook(dt: number): void {
+    const mag = Math.hypot(this.lookAxis.x, this.lookAxis.y);
+    if (mag < 0.04) return;
+    const t = Math.min(1, mag);
+    const curved = t * t * (0.35 + 0.65 * t);
+    const nx = this.lookAxis.x / mag;
+    const ny = this.lookAxis.y / mag;
+    const rate = 2.65 * (this.sensitivity / 0.0022);
+    this.yaw -= nx * curved * rate * dt;
+    this.pitch -= ny * curved * rate * dt;
+    this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch));
+  }
+
   setMoveAxis(x: number, y: number): void {
     const mag = Math.hypot(x, y);
-    if (mag < 0.12) {
+    if (mag < 0.08) {
       this.moveAxis.x = 0;
       this.moveAxis.y = 0;
       return;

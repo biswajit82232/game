@@ -189,6 +189,7 @@ export interface GameSnapshot {
   secretObjective: string | null;
   overlay: string | null;
   subtitles: string | null;
+  solo: boolean;
 }
 
 export interface GameEndPayload {

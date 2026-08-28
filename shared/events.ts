@@ -9,10 +9,12 @@ import type {
 
 export interface ClientToServerEvents {
   "room:create": () => void;
+  "room:solo": () => void;
   "room:join": (payload: { code: string }) => void;
   "room:ready": () => void;
   "room:swapRoles": () => void;
   "room:leave": () => void;
+  "room:rejoin": (payload: { code: string; role: Role }) => void;
   "player:introDone": () => void;
   "player:move": (payload: {
     x: number;

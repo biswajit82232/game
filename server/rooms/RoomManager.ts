@@ -8,6 +8,7 @@ export interface RoomPlayer {
   ready: boolean;
   connected: boolean;
   sessionToken: string;
+  isBot?: boolean;
 }
 
 export interface Room {
@@ -17,6 +18,7 @@ export interface Room {
   players: RoomPlayer[];
   createdAt: number;
   disconnectedAt: number | null;
+  solo: boolean;
 }
 
 export type JoinError = "not_found" | "full" | "started" | "duplicate";
@@ -53,6 +55,7 @@ export class RoomManager {
       hostId: socketId,
       createdAt: Date.now(),
       disconnectedAt: null,
+      solo: false,
       players: [
         {
           socketId,
@@ -68,13 +71,30 @@ export class RoomManager {
     return room;
   }
 
+  createSolo(socketId: string): Room {
+    const room = this.createRoom(socketId);
+    room.solo = true;
+    room.players[0]!.ready = true;
+    room.players.push({
+      socketId: "__BOT__",
+      role: "watcher",
+      ready: true,
+      connected: true,
+      isBot: true,
+      sessionToken: `${room.code}-watcher`,
+    });
+    return room;
+  }
+
   joinRoom(
     socketId: string,
     rawCode: string,
   ): { ok: true; room: Room } | { ok: false; error: JoinError } {
     const code = normalizeCode(rawCode);
+    if (!code) return { ok: false, error: "not_found" };
     const room = this.rooms.get(code);
     if (!room) return { ok: false, error: "not_found" };
+    if (room.solo) return { ok: false, error: "full" };
     if (room.phase !== "lobby") return { ok: false, error: "started" };
     if (room.players.some((p) => p.socketId === socketId)) {
       return { ok: false, error: "duplicate" };
@@ -107,7 +127,7 @@ export class RoomManager {
 
   swapRoles(socketId: string): Room | undefined {
     const found = this.getPlayer(socketId);
-    if (!found || found.room.phase !== "lobby") return undefined;
+    if (!found || found.room.phase !== "lobby" || found.room.solo) return undefined;
     const { room } = found;
     if (room.hostId !== socketId) return undefined;
     for (const p of room.players) {
@@ -154,7 +174,7 @@ export class RoomManager {
   reconnect(socketId: string, code: string, role: Role): Room | undefined {
     const room = this.getRoom(code);
     if (!room) return undefined;
-    const player = room.players.find((p) => p.role === role);
+    const player = room.players.find((p) => p.role === role && !p.isBot);
     if (!player || player.connected) return undefined;
     player.socketId = socketId;
     player.connected = true;
@@ -164,12 +184,40 @@ export class RoomManager {
   }
 
   leave(socketId: string): Room | undefined {
+    const found = this.getPlayer(socketId);
+    if (!found) return undefined;
+    const inGame = found.room.phase !== "lobby";
     const result = this.disconnect(socketId);
     if (!result) return undefined;
-    if (result.room.phase !== "lobby" && result.room.players.every((p) => !p.connected)) {
-      this.rooms.delete(result.room.code);
+    const { room } = result;
+    if (inGame && room.players.every((p) => p.isBot || !p.connected)) {
+      this.rooms.delete(room.code);
     }
-    return result.room;
+    return room;
+  }
+
+  pruneStale(maxMs = 90_000): string[] {
+    const now = Date.now();
+    const gone: string[] = [];
+    for (const room of [...this.rooms.values()]) {
+      if (room.phase === "lobby") continue;
+      const humans = room.players.filter((p) => !p.isBot);
+      if (
+        humans.length > 0 &&
+        humans.every((p) => !p.connected) &&
+        room.disconnectedAt &&
+        now - room.disconnectedAt > maxMs
+      ) {
+        gone.push(room.code);
+      }
+    }
+    for (const code of gone) {
+      this.rooms.delete(code);
+      for (const [socketId, mapped] of this.socketToRoom) {
+        if (mapped === code) this.socketToRoom.delete(socketId);
+      }
+    }
+    return gone;
   }
 
   toPublic(room: Room): RoomPublic {
@@ -182,7 +230,7 @@ export class RoomManager {
         role: p.role,
         ready: p.ready,
         connected: p.connected,
-        name: i === 0 || p.role === "walker" ? "PLAYER 1" : "PLAYER 2",
+        name: p.isBot ? "AI WATCHER" : i === 0 || p.role === "walker" ? "PLAYER 1" : "PLAYER 2",
       })),
     };
   }

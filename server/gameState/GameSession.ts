@@ -75,6 +75,8 @@ export class GameSession {
   nearbyWalker: { id: string; prompt: string } | null = null;
   overlay: string | null = null;
   subtitles: string | null = null;
+  solo = false;
+  pendingChats: { from: Role | "system"; text: string }[] = [];
   stats = {
     itemsFound: 0,
     puzzlesSolved: 0,
@@ -94,8 +96,14 @@ export class GameSession {
   private coatUsed = false;
   private lastNoise: { x: number; y: number; z: number } | null = null;
   private simultaneousTimer = 0;
+  private botHintAt = 2.5;
+  private botKeyed = false;
+  private botGen = false;
+  private overlayUntil = 0;
+  private subtitleUntil = 0;
 
-  constructor() {
+  constructor(solo = false) {
+    this.solo = solo;
     this.powerSafeSwitch = Math.floor(Math.random() * 3);
     this.symbolSolution = randomSymbolSequence(4);
     const spawn = getRoomById("entrance")!;
@@ -138,7 +146,7 @@ export class GameSession {
     }));
     this.objectives = OBJECTIVES.map((o) => ({ ...o, done: false }));
     this.items = this.spawnItems();
-    if (Math.random() < 0.28) {
+    if (!solo && Math.random() < 0.28) {
       const secrets = [
         "Do not tell the Walker about the red marks in the ritual room.",
         "Wait 30 seconds before warning them if something stands behind them.",
@@ -275,6 +283,17 @@ export class GameSession {
     dt = 1 / 15,
   ): void {
     if (this.ended || !this.walker.alive) return;
+    if (
+      !payload ||
+      typeof payload.x !== "number" ||
+      typeof payload.z !== "number" ||
+      !Number.isFinite(payload.x) ||
+      !Number.isFinite(payload.z)
+    ) {
+      return;
+    }
+    const yaw = Number.isFinite(payload.yaw) ? payload.yaw : 0;
+    const pitch = Number.isFinite(payload.pitch) ? payload.pitch : 0;
     if (role === "walker") {
       const prev = this.walker.position;
       const dx = payload.x - prev.x;
@@ -291,14 +310,14 @@ export class GameSession {
       this.walker.position.x = resolved.x;
       this.walker.position.z = resolved.z;
       this.lastWalkerYaw = this.walker.yaw;
-      this.walker.yaw = payload.yaw;
-      this.walker.pitch = clamp(payload.pitch, -1.2, 1.2);
+      this.walker.yaw = yaw;
+      this.walker.pitch = clamp(pitch, -1.2, 1.2);
       this.walker.sprinting = payload.sprinting && this.walker.stamina > 1;
       if (this.walker.sprinting && len > 0.02) {
         this.lastNoise = { x: resolved.x, y: 0, z: resolved.z };
       }
       if (this.monster.state.behindWalker) {
-        const delta = Math.abs(payload.yaw - this.lastWalkerYaw);
+        const delta = Math.abs(yaw - this.lastWalkerYaw);
         if (delta > 0.9) this.walkerLookedBack = true;
       }
       const room = getRoomAt(resolved.x, resolved.z);
@@ -326,8 +345,8 @@ export class GameSession {
       this.watcher.position.x = prev.x + mx;
       this.watcher.position.z = prev.z + mz;
       this.watcher.position.y = 2.35;
-      this.watcher.yaw = payload.yaw;
-      this.watcher.pitch = clamp(payload.pitch, -1.4, 1.2);
+      this.watcher.yaw = yaw;
+      this.watcher.pitch = clamp(pitch, -1.4, 1.2);
     }
   }
 
@@ -359,7 +378,7 @@ export class GameSession {
       this.warnedThisWindow = true;
       this.trust = clamp(this.trust + 5, 0, 100);
       this.pushEvent("warning", "DO NOT TURN AROUND.", 0.6, "both");
-      this.subtitles = "WATCHER: DO NOT TURN AROUND.";
+      this.showSubtitle("WATCHER: DO NOT TURN AROUND.");
     } else if (this.coatUsed) {
       this.trust = clamp(this.trust - 4, 0, 100);
       this.pushEvent("warning", "It was nothing. Keep moving.", 0.2, "walker");
@@ -429,14 +448,14 @@ export class GameSession {
       this.stats.itemsFound += 1;
       const note = NOTES[item.id];
       if (note) {
-        this.overlay = `${note.title}\n\n${note.body}`;
-        this.subtitles = note.body.slice(0, 80);
+        this.showOverlay(`${note.title}\n\n${note.body}`, 12);
+        this.showSubtitle(note.body.slice(0, 80), 8);
       }
     } else if (item.type === "audio-log") {
       item.taken = true;
       this.stats.itemsFound += 1;
       this.pushEvent("audio-log", "Recording: the observer channel is not a camera. It is a person.", 0.4, "both");
-      this.subtitles = "AUDIO LOG: The observer channel is not a camera. It is a person.";
+      this.showSubtitle("AUDIO LOG: The observer channel is not a camera. It is a person.", 6);
     } else if (item.type === "switch") {
       const index = Number(item.id.split("-")[1]);
       if (!isSafeSwitch(index, this.powerSafeSwitch)) {
@@ -484,6 +503,8 @@ export class GameSession {
   }
 
   private tryOpenExit(): void {
+    const door = this.doors.find((d) => d.id === "door-office-exit");
+    if (door?.open) return;
     const ready =
       this.generatorOn &&
       this.puzzles.find((p) => p.id === "symbols")?.solved &&
@@ -493,9 +514,11 @@ export class GameSession {
       return;
     }
     if (this.watcher.holdingSignal) {
-      this.puzzles.find((p) => p.id === "simultaneous")!.solved = true;
-      this.stats.puzzlesSolved += 1;
-      const door = this.doors.find((d) => d.id === "door-office-exit");
+      const puzzle = this.puzzles.find((p) => p.id === "simultaneous")!;
+      if (!puzzle.solved) {
+        puzzle.solved = true;
+        this.stats.puzzlesSolved += 1;
+      }
       if (door) {
         door.locked = false;
         door.open = true;
@@ -511,8 +534,8 @@ export class GameSession {
     if (this.ended || !this.walker.alive) return;
     this.tickCount += 1;
     this.time += dt;
-    this.overlay = null;
-    this.subtitles = null;
+    if (this.time >= this.overlayUntil) this.overlay = null;
+    if (this.time >= this.subtitleUntil) this.subtitles = null;
 
     if (this.walker.sprinting && this.walker.stamina > 0) {
       this.walker.stamina = clamp(this.walker.stamina - STAMINA_DRAIN * dt, 0, MAX_STAMINA);
@@ -567,7 +590,49 @@ export class GameSession {
     this.updateNearby();
     this.tickHorror(dt);
     this.tickSimultaneous(dt);
+    if (this.solo) this.tickBot();
     this.checkWin();
+  }
+
+  private tickBot(): void {
+    this.watcher.position.x = this.walker.position.x;
+    this.watcher.position.z = this.walker.position.z;
+    this.watcher.position.y = 2.35;
+    this.watcher.holdingSignal = true;
+    this.watcher.energy = MAX_ENERGY;
+    this.watcher.mode = "spirit";
+    if (this.monster.state.behindWalker && !this.warnedThisWindow) {
+      this.warn();
+      this.pendingChats.push({ from: "watcher", text: "DO NOT TURN AROUND." });
+    }
+    const roomId = this.getRoomId();
+    if (this.time >= this.botHintAt && this.botHintAt > 0) {
+      this.botHintAt = -1;
+      this.pendingChats.push({
+        from: "watcher",
+        text: "I'm with you. I'll warn you if it stands behind you.",
+      });
+    }
+    if (roomId === "security" && !this.botKeyed && !this.puzzles.find((p) => p.id === "symbols")?.solved) {
+      this.botKeyed = true;
+      this.pendingChats.push({
+        from: "watcher",
+        text: `Sequence: ${this.symbolSolution.join(", ")}.`,
+      });
+    }
+    if (roomId === "generator" && !this.botGen && !this.generatorOn) {
+      this.botGen = true;
+      this.pendingChats.push({
+        from: "watcher",
+        text: `Safe breaker is number ${this.powerSafeSwitch + 1}.`,
+      });
+    }
+  }
+
+  drainChats(): { from: Role | "system"; text: string }[] {
+    const c = this.pendingChats;
+    this.pendingChats = [];
+    return c;
   }
 
   private tickSimultaneous(dt: number): void {
@@ -596,10 +661,10 @@ export class GameSession {
       this.pushEvent("lights-out", "A light dies.", 0.4, "walker");
     } else if (roll < 0.2) {
       this.pushEvent("child-laugh", "A child's laugh, far away. There are no children here.", 0.45, "both");
-      this.subtitles = "A child's laugh, far away.";
+      this.showSubtitle("A child's laugh, far away.");
     } else if (roll < 0.28) {
       this.pushEvent("phone-ring", "A phone rings in an empty office. The voicemail is a pizza coupon.", 0.25, "walker");
-      this.subtitles = "Automated voice: Your pizza will arrive in twenty minutes.";
+      this.showSubtitle("Automated voice: Your pizza will arrive in twenty minutes.");
     } else if (roll < 0.36) {
       this.pushEvent("silhouette-flash", "", 0.7, "walker");
     } else if (roll < 0.44) {
@@ -744,6 +809,16 @@ export class GameSession {
     };
   }
 
+  private showOverlay(text: string, seconds = 8): void {
+    this.overlay = text;
+    this.overlayUntil = this.time + seconds;
+  }
+
+  private showSubtitle(text: string, seconds = 4): void {
+    this.subtitles = text;
+    this.subtitleUntil = this.time + seconds;
+  }
+
   private pushEvent(type: string, message: string, intensity: number, to: Role | "both"): void {
     this.pendingEvents.push({ type, message, intensity, to });
   }
@@ -786,14 +861,17 @@ export class GameSession {
       puzzles: this.puzzles.map((p) => ({ ...p })),
       lights: this.lights.map((l) => ({ ...l })),
       generatorOn: this.generatorOn,
-      powerSafeSwitch: role === "watcher" && this.watcher.mode === "danger" ? this.powerSafeSwitch : -1,
-      symbolSolution: role === "watcher" && (this.watcher.mode === "spirit" || this.watcher.mode === "echo")
-        ? [...this.symbolSolution]
-        : null,
+      powerSafeSwitch:
+        this.solo || (role === "watcher" && this.watcher.mode === "danger") ? this.powerSafeSwitch : -1,
+      symbolSolution:
+        this.solo || (role === "watcher" && (this.watcher.mode === "spirit" || this.watcher.mode === "echo"))
+          ? [...this.symbolSolution]
+          : null,
       nearbyInteractable: role === "walker" ? this.nearbyWalker : null,
-      secretObjective: role === "watcher" ? this.secretObjective : null,
+      secretObjective: role === "watcher" && !this.solo ? this.secretObjective : null,
       overlay: role === "walker" ? this.overlay : null,
       subtitles: this.subtitles,
+      solo: this.solo,
     };
   }
 }

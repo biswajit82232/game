@@ -19,7 +19,7 @@ export function SettingsPanel({
         <Slider label="MASTER VOLUME" value={settings.master} onChange={(v) => set({ master: v })} />
         <Slider label="MUSIC VOLUME" value={settings.music} onChange={(v) => set({ music: v })} />
         <Slider label="SFX VOLUME" value={settings.sfx} onChange={(v) => set({ sfx: v })} />
-        <Slider label="MOUSE SENSITIVITY" value={settings.sensitivity} min={0.08} max={0.5} onChange={(v) => set({ sensitivity: v })} />
+        <Slider label="LOOK SENSITIVITY" value={settings.sensitivity} min={0.08} max={0.5} onChange={(v) => set({ sensitivity: v })} />
         <div className="field">
           <label>GRAPHICS QUALITY</label>
           <div className="row">

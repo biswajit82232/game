@@ -22,15 +22,17 @@ export function JoinRoom({
             maxLength={6}
             value={code}
             placeholder="A7K9P"
+            autoComplete="off"
+            enterKeyHint="go"
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             onKeyDown={(e) => {
-              if (e.key === "Enter") onJoin(code);
+              if (e.key === "Enter") onJoin(code.trim());
             }}
           />
         </div>
         <p className="error">{error}</p>
         <div className="row">
-          <HorrorButton onClick={() => onJoin(code)}>JOIN</HorrorButton>
+          <HorrorButton onClick={() => onJoin(code.trim())}>JOIN</HorrorButton>
           <HorrorButton variant="ghost" onClick={onBack}>
             BACK
           </HorrorButton>

@@ -15,6 +15,16 @@ export interface GameSettings {
 
 const KEY = "dta-settings";
 
+function defaultGraphics(): GraphicsQuality {
+  if (typeof window === "undefined") return "high";
+  try {
+    if (window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 1024) return "low";
+  } catch {
+    /* ignore */
+  }
+  return "high";
+}
+
 export const DEFAULT_SETTINGS: GameSettings = {
   master: 0.8,
   music: 0.45,
@@ -31,10 +41,10 @@ export const DEFAULT_SETTINGS: GameSettings = {
 export function loadSettings(): GameSettings {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
+    if (!raw) return { ...DEFAULT_SETTINGS, graphics: defaultGraphics() };
     return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, graphics: defaultGraphics() };
   }
 }
 

@@ -42,6 +42,11 @@ export function GameView({
   const [fx, setFx] = useState({ grain: 0, shake: 0 });
   const [showSettings, setShowSettings] = useState(false);
   const [touch, setTouch] = useState(() => isTouchPreferred());
+  const gyroRef = useRef<((ev: DeviceOrientationEvent) => void) | null>(null);
+
+  useEffect(() => {
+    if (engineRef.current) engineRef.current.paused = paused;
+  }, [paused]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -85,10 +90,14 @@ export function GameView({
       engine.controller.touchMode = next;
     };
     window.addEventListener("resize", onResize);
+    const blockZoom = (e: Event) => e.preventDefault();
+    document.addEventListener("gesturestart", blockZoom);
     return () => {
       socket.off("game:event", onEvent);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", onResize);
+      document.removeEventListener("gesturestart", blockZoom);
+      if (gyroRef.current) window.removeEventListener("deviceorientation", gyroRef.current);
       engine.dispose();
       engineRef.current = null;
     };
@@ -117,7 +126,7 @@ export function GameView({
         <div className="prompt">LOADING THE BUILDING…</div>
       )}
       {snapshot && role === "walker" && (
-        <WalkerHUD snap={snapshot} prompt={prompt} otherAlive={!disconnected} />
+        <WalkerHUD snap={snapshot} prompt={prompt} otherAlive={!disconnected} touch={touch} />
       )}
       {snapshot && role === "watcher" && (
         <WatcherHUD
@@ -133,7 +142,7 @@ export function GameView({
           role={role}
           prompt={prompt}
           onMove={(x, y) => engineRef.current?.controller.setMoveAxis(x, y)}
-          onLook={(dx, dy) => engineRef.current?.controller.applyLook(dx, dy, 1.8)}
+          onLookAxis={(x, y) => engineRef.current?.controller.setLookAxis(x, y)}
           onSprint={(held) => {
             if (engineRef.current) engineRef.current.controller.sprintHeld = held;
           }}
@@ -149,6 +158,31 @@ export function GameView({
           }}
           onWarn={() => socket.emit("player:warning")}
           onHold={(held) => socket.emit("player:holdSignal", { holding: held })}
+          onGyro={async () => {
+            const DOE = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
+            if (typeof DOE.requestPermission === "function") {
+              const res = await DOE.requestPermission();
+              if (res !== "granted") return;
+            }
+            if (gyroRef.current) window.removeEventListener("deviceorientation", gyroRef.current);
+            let lastG: number | null = null;
+            let lastB: number | null = null;
+            const onOrient = (ev: DeviceOrientationEvent) => {
+              if (ev.gamma == null || ev.beta == null) return;
+              if (lastG == null || lastB == null) {
+                lastG = ev.gamma;
+                lastB = ev.beta;
+                return;
+              }
+              const dg = ev.gamma - lastG;
+              const db = ev.beta - lastB;
+              lastG = ev.gamma;
+              lastB = ev.beta;
+              engineRef.current?.controller.applyLook(dg * 6.5, db * 6.5, 1);
+            };
+            gyroRef.current = onOrient;
+            window.addEventListener("deviceorientation", onOrient);
+          }}
         />
       )}
       {settings.subtitles && snapshot?.subtitles && <div className="subtitles">{snapshot.subtitles}</div>}

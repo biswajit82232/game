@@ -5,10 +5,12 @@ export function WalkerHUD({
   snap,
   prompt,
   otherAlive,
+  touch = false,
 }: {
   snap: GameSnapshot;
   prompt: string | null;
   otherAlive: boolean;
+  touch?: boolean;
 }) {
   return (
     <div className="hud">
@@ -18,7 +20,15 @@ export function WalkerHUD({
       </div>
       <div className="hud-tr">
         <div className="bar-label">PLAYER STATUS</div>
-        <div>WATCHER: {otherAlive ? "ALIVE" : "GONE"}</div>
+        <div>WATCHER: {snap.solo ? "AI" : otherAlive ? "ALIVE" : "GONE"}</div>
+        {snap.solo && snap.symbolSolution && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            SEQUENCE: {snap.symbolSolution.join(" · ").toUpperCase()}
+          </p>
+        )}
+        {snap.solo && snap.powerSafeSwitch >= 0 && (
+          <p className="muted">SAFE BREAKER: {snap.powerSafeSwitch + 1}</p>
+        )}
       </div>
       <div className="hud-bl">
         <div className="bar-label">STAMINA</div>
@@ -32,7 +42,7 @@ export function WalkerHUD({
           {bar(snap.walker.battery)} {Math.round(snap.walker.battery)}%
         </div>
       </div>
-      {prompt && <div className="prompt">{prompt}</div>}
+      {prompt && <div className="prompt">{touch ? prompt.replace("[E]", "TAP") : prompt}</div>}
     </div>
   );
 }

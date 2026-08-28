@@ -5,12 +5,14 @@ const DUST = Array.from({ length: 28 }, (_, i) => i);
 export function MainMenu({
   onCreate,
   onJoin,
+  onSolo,
   onHow,
   onSettings,
   loopTitle,
 }: {
   onCreate: () => void;
   onJoin: () => void;
+  onSolo: () => void;
   onHow: () => void;
   onSettings: () => void;
   loopTitle?: boolean;
@@ -38,6 +40,7 @@ export function MainMenu({
         <h1 className="game-title">{loopTitle ? "YOU NEVER LEFT." : "DON'T TURN AROUND"}</h1>
         <p className="game-sub">Two players. One monster. Trust nobody.</p>
         <div className="menu-col">
+          <HorrorButton onClick={onSolo}>PLAY ALONE</HorrorButton>
           <HorrorButton onClick={onCreate}>CREATE ROOM</HorrorButton>
           <HorrorButton onClick={onJoin}>JOIN ROOM</HorrorButton>
           <HorrorButton variant="ghost" onClick={onHow}>

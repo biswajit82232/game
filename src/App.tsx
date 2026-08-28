@@ -14,6 +14,24 @@ import { ResultsScreen } from "./components/hud/ResultsScreen";
 
 type Screen = "menu" | "how" | "settings" | "join" | "lobby" | "intro" | "game" | "results";
 
+const PLAY_KEY = "dta-last-play";
+
+type LastPlay = { code: string; role: Role | null };
+
+function readLastPlay(): LastPlay | null {
+  try {
+    const raw = sessionStorage.getItem(PLAY_KEY);
+    return raw ? (JSON.parse(raw) as LastPlay) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastPlay(play: LastPlay | null): void {
+  if (!play?.code) sessionStorage.removeItem(PLAY_KEY);
+  else sessionStorage.setItem(PLAY_KEY, JSON.stringify(play));
+}
+
 export function App() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [settings, setSettings] = useState<GameSettings>(() => loadSettings());
@@ -25,14 +43,22 @@ export function App() {
   const [end, setEnd] = useState<GameEndPayload | null>(null);
   const [disconnected, setDisconnected] = useState<Role | null>(null);
   const [loopTitle, setLoopTitle] = useState(false);
-  const [serverDown, setServerDown] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [settingsFrom, setSettingsFrom] = useState<Screen>("menu");
   const socketId = useRef("");
+  const screenRef = useRef<Screen>(screen);
+  const playRef = useRef<LastPlay>(readLastPlay() ?? { code: "", role: null });
+  screenRef.current = screen;
 
   const applySettings = (next: GameSettings) => {
     setSettings(next);
     saveSettings(next);
     getAudio(next).applySettings(next);
+  };
+
+  const rememberPlay = (partial: Partial<LastPlay>) => {
+    playRef.current = { ...playRef.current, ...partial };
+    writeLastPlay(playRef.current.code ? playRef.current : null);
   };
 
   const resetPlay = useCallback(() => {
@@ -42,31 +68,62 @@ export function App() {
     setDisconnected(null);
     setRole(null);
     setRoom(null);
+    setReconnecting(false);
+    playRef.current = { code: "", role: null };
+    writeLastPlay(null);
   }, []);
 
   useEffect(() => {
     const socket = getSocket();
     const audio = getAudio();
 
+    const tryRejoin = () => {
+      const play = playRef.current;
+      const current = screenRef.current;
+      if (!play.code) return;
+      if ((current === "game" || current === "intro") && play.role) {
+        socket.emit("room:rejoin", { code: play.code, role: play.role });
+      } else if (current === "lobby") {
+        socket.emit("room:join", { code: play.code });
+      }
+    };
+
     const onConnect = () => {
       socketId.current = socket.id ?? "";
-      setServerDown(false);
+      setReconnecting(false);
+      tryRejoin();
     };
-    const onDisconnect = () => setServerDown(true);
+    const onDisconnect = () => {
+      const current = screenRef.current;
+      if (current === "game" || current === "intro" || current === "lobby") {
+        setReconnecting(true);
+      }
+    };
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
-    socket.on("connect_error", () => setServerDown(true));
+    socket.on("connect_error", () => {
+      if (screenRef.current === "game" || screenRef.current === "intro" || screenRef.current === "lobby") {
+        setReconnecting(true);
+      }
+    });
 
     socket.on("room:updated", (next) => {
       setRoom(next);
       setJoinError(null);
+      rememberPlay({ code: next.code });
       if (next.phase === "lobby") setScreen("lobby");
     });
-    socket.on("room:error", ({ message }) => setJoinError(message));
+    socket.on("room:error", ({ message }) => {
+      setJoinError(message);
+      if (screenRef.current === "game" || screenRef.current === "intro") {
+        setReconnecting(false);
+      }
+    });
     socket.on("game:started", ({ role: nextRole }) => {
       setRole(nextRole);
-      setScreen("intro");
+      rememberPlay({ role: nextRole });
+      setScreen((s) => (s === "game" || s === "results" ? s : "intro"));
       void audio.resume();
     });
     socket.on("game:snapshot", (snap) => setSnapshot(snap));
@@ -84,19 +141,25 @@ export function App() {
     socket.on("game:ended", (payload) => {
       setEnd(payload);
       setScreen("results");
+      playRef.current = { code: "", role: null };
+      writeLastPlay(null);
       if (payload.ending === "loop") {
         setLoopTitle(true);
         window.setTimeout(() => setLoopTitle(false), 4000);
       }
     });
     socket.on("player:disconnected", ({ role: r }) => setDisconnected(r));
-    socket.on("player:reconnected", () => setDisconnected(null));
+    socket.on("player:reconnected", () => {
+      setDisconnected(null);
+      setReconnecting(false);
+    });
 
     if (socket.connected) onConnect();
 
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
+      socket.off("connect_error");
       socket.off("room:updated");
       socket.off("room:error");
       socket.off("game:started");
@@ -115,24 +178,18 @@ export function App() {
     setScreen("menu");
   };
 
-  if (serverDown && screen !== "menu" && screen !== "settings" && screen !== "how") {
-    return (
-      <div className="screen menu-overlay">
-        <div className="panel">
-          <h2>CONNECTION LOST</h2>
-          <p className="muted">The server is unavailable. Start it with npm run dev and try again.</p>
-          <button className="hbtn" onClick={() => setScreen("menu")}>
-            BACK
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const reconnectBanner = reconnecting ? (
+    <div className="reconnect-banner">CONNECTION LOST — RECONNECTING</div>
+  ) : null;
 
   if (screen === "menu") {
     return (
       <MainMenu
         loopTitle={loopTitle}
+        onSolo={() => {
+          void getAudio(settings).resume();
+          getSocket().emit("room:solo");
+        }}
         onCreate={() => {
           void getAudio(settings).resume();
           getSocket().emit("room:create");
@@ -166,6 +223,10 @@ export function App() {
         error={joinError}
         onBack={() => setScreen("menu")}
         onJoin={(code) => {
+          if (!code.trim()) {
+            setJoinError("Enter a room code.");
+            return;
+          }
           void getAudio(settings).resume();
           getSocket().emit("room:join", { code });
         }}
@@ -174,37 +235,46 @@ export function App() {
   }
   if (screen === "lobby" && room) {
     return (
-      <Lobby
-        room={room}
-        selfId={getSocket().id ?? socketId.current}
-        onReady={() => getSocket().emit("room:ready")}
-        onSwap={() => getSocket().emit("room:swapRoles")}
-        onLeave={leave}
-      />
+      <>
+        {reconnectBanner}
+        <Lobby
+          room={room}
+          selfId={getSocket().id ?? socketId.current}
+          onReady={() => getSocket().emit("room:ready")}
+          onSwap={() => getSocket().emit("room:swapRoles")}
+          onLeave={leave}
+        />
+      </>
     );
   }
   if (screen === "intro" && role) {
     return (
-      <RoleIntro
-        role={role}
-        onContinue={() => {
-          getSocket().emit("player:introDone");
-          setScreen("game");
-        }}
-      />
+      <>
+        {reconnectBanner}
+        <RoleIntro
+          role={role}
+          onContinue={() => {
+            getSocket().emit("player:introDone");
+            setScreen("game");
+          }}
+        />
+      </>
     );
   }
   if (screen === "game" && role) {
     return (
-      <GameView
-        role={role}
-        settings={settings}
-        snapshot={snapshot}
-        messages={messages}
-        disconnected={disconnected}
-        onLobby={leave}
-        onSettingsChange={applySettings}
-      />
+      <>
+        {reconnectBanner}
+        <GameView
+          role={role}
+          settings={settings}
+          snapshot={snapshot}
+          messages={messages}
+          disconnected={disconnected}
+          onLobby={leave}
+          onSettingsChange={applySettings}
+        />
+      </>
     );
   }
   if (screen === "results" && end) {
@@ -225,5 +295,5 @@ export function App() {
       </div>
     );
   }
-  return <MainMenu loopTitle={loopTitle} onCreate={() => getSocket().emit("room:create")} onJoin={() => setScreen("join")} onHow={() => setScreen("how")} onSettings={() => setScreen("settings")} />;
+  return <MainMenu loopTitle={loopTitle} onSolo={() => getSocket().emit("room:solo")} onCreate={() => getSocket().emit("room:create")} onJoin={() => setScreen("join")} onHow={() => setScreen("how")} onSettings={() => setScreen("settings")} />;
 }

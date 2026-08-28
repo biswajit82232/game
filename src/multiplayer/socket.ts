@@ -9,6 +9,9 @@ export function getSocket(): GameSocket {
   if (!socket) {
     socket = io({
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 20,
+      reconnectionDelay: 500,
       transports: ["websocket", "polling"],
     });
   }

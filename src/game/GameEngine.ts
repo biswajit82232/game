@@ -8,6 +8,7 @@ import { buildWorld, syncDoors, syncLights, upsertItem, type WorldHandles } from
 import { animateHollow, createHollow } from "./monster/HollowMesh";
 import { WalkerController } from "./walker/WalkerController";
 import { getAudio } from "../systems/audio";
+import { isTouchPreferred } from "../utils/touch";
 
 export interface EngineCallbacks {
   onInteract: (id: string, prompt: string) => void;
@@ -47,6 +48,7 @@ export class GameEngine {
   private snapshot: GameSnapshot | null = null;
   private flicker = 1;
   private mode: WatcherMode = "normal";
+  paused = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -112,13 +114,12 @@ export class GameEngine {
     this.controller.sensitivity = settings.sensitivity * 0.01;
     this.controller.x = 0;
     this.controller.z = 0;
-    this.controller.touchMode =
-      typeof window !== "undefined" &&
-      (window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 900px)").matches);
+    this.controller.touchMode = isTouchPreferred();
     this.unbind = this.controller.bind(canvas);
     window.addEventListener("resize", this.onResize);
     this.resizeObserver = new ResizeObserver(() => this.onResize());
     this.resizeObserver.observe(canvas.parentElement ?? canvas);
+    window.visualViewport?.addEventListener("resize", this.onResize);
     this.onResize();
     this.raf = requestAnimationFrame(this.loop);
   }
@@ -173,9 +174,11 @@ export class GameEngine {
   };
 
   private update(dt: number): void {
+    if (this.paused) return;
     const snap = this.snapshot;
     const stamina = snap?.walker.stamina ?? 100;
     const { sprinting, moving } = this.controller.step(dt, this.role, stamina);
+    this.controller.stepLook(dt);
     this.effects.tick(dt);
 
     this.camera.position.set(
@@ -283,6 +286,7 @@ export class GameEngine {
     this.unbind();
     window.removeEventListener("resize", this.onResize);
     this.resizeObserver.disconnect();
+    window.visualViewport?.removeEventListener("resize", this.onResize);
     this.renderer.dispose();
     this.effects.reset();
   }
