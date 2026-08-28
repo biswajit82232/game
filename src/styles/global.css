@@ -25,6 +25,7 @@ body,
   background: var(--bg);
   color: var(--text);
   overscroll-behavior: none;
+  overflow: hidden;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -196,6 +197,8 @@ input {
 
 .panel {
   width: min(520px, 92vw);
+  max-height: min(88dvh, 920px);
+  overflow: auto;
   background: rgba(8, 9, 12, 0.88);
   border: 1px solid var(--line);
   padding: 28px 24px;
@@ -395,6 +398,62 @@ input {
   100% { opacity: 0.4; }
 }
 
+.jumpscare {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: jumpscareIn 0.12s ease-out;
+}
+
+.jumpscare-face {
+  width: 145%;
+  height: 145%;
+  object-fit: cover;
+  filter: contrast(1.4) saturate(0.75) brightness(0.82);
+  animation: jumpscareFace 0.16s ease-out, jumpscareShake 0.07s linear infinite;
+}
+
+.jumpscare-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 42%, rgba(255, 40, 20, 0.28), transparent 55%);
+  mix-blend-mode: screen;
+  animation: jumpscareFlash 0.1s steps(2) infinite;
+}
+
+.jumpscare.is-still .jumpscare-face,
+.jumpscare.is-still .jumpscare-flash {
+  animation: none;
+}
+
+@keyframes jumpscareIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes jumpscareFace {
+  0% { transform: scale(3.4) translate3d(0, 12%, 0); }
+  100% { transform: scale(1.18); }
+}
+
+@keyframes jumpscareShake {
+  0% { transform: scale(1.2) translate3d(-1.4%, 0.8%, 0); }
+  50% { transform: scale(1.26) translate3d(1.6%, -1%, 0); }
+  100% { transform: scale(1.16) translate3d(-0.6%, 0.4%, 0); }
+}
+
+@keyframes jumpscareFlash {
+  0% { opacity: 0.15; }
+  50% { opacity: 0.85; }
+  100% { opacity: 0.2; }
+}
+
 .bar-label {
   color: var(--muted);
   margin-bottom: 4px;
@@ -478,7 +537,9 @@ input {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.42) 100%);
+  background:
+    radial-gradient(ellipse at center, transparent 48%, rgba(0, 0, 0, 0.38) 100%),
+    linear-gradient(to top, rgba(0, 0, 0, 0.22), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.18));
 }
 
 .watcher-fx {
@@ -674,49 +735,75 @@ input {
 .game-wrap.is-touch .hud-tl {
   top: max(10px, env(safe-area-inset-top));
   left: max(10px, env(safe-area-inset-left));
-  right: 96px;
-  max-width: min(420px, 62vw);
-  font-size: 0.68rem;
+  right: auto;
+  max-width: min(280px, 58vw);
+  font-size: 0.62rem;
   padding: 8px 10px;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 8px;
 }
 
 .game-wrap.is-touch .hud-tr {
-  top: max(48px, calc(env(safe-area-inset-top) + 44px));
-  right: max(10px, env(safe-area-inset-right));
-  font-size: 0.62rem;
-  padding: 8px;
-  max-width: 46vw;
+  top: max(48px, calc(env(safe-area-inset-top) + 38px));
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  font-size: 0.58rem;
+  padding: 4px;
+  max-width: min(420px, 78vw);
+  background: transparent;
+  border: none;
+}
+
+.game-wrap.is-touch .modes {
+  gap: 4px;
+}
+
+.game-wrap.is-touch .modes button {
+  min-height: 40px;
+  padding: 8px 8px;
+  font-size: 0.58rem;
 }
 
 .game-wrap.is-touch .hud-top {
   top: max(10px, env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.62rem;
-  padding: 6px 8px;
+  font-size: 0.58rem;
+  padding: 5px 8px;
   pointer-events: none;
+  max-width: 46vw;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 8px;
 }
 
 .game-wrap.is-touch .prompt {
-  bottom: 46%;
-  font-size: 0.8rem;
-  max-width: 78%;
+  bottom: 48%;
+  font-size: 0.78rem;
+  max-width: 72%;
   text-align: center;
   pointer-events: none;
 }
 
 .game-wrap.is-touch .subtitles {
-  bottom: 52%;
+  bottom: 54%;
+  max-width: 78%;
   pointer-events: none;
+  font-size: 0.8rem;
 }
 
 .chat-compact {
-  top: max(52px, calc(env(safe-area-inset-top) + 44px));
-  left: max(10px, env(safe-area-inset-left));
-  right: auto;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  left: auto;
   bottom: auto;
-  width: min(220px, 42vw);
-  z-index: 6;
+  width: 92px;
+  z-index: 9;
+}
+
+.game-wrap.is-touch .chat-compact {
+  top: max(100px, calc(env(safe-area-inset-top) + 92px));
 }
 
 .touch-layer {
@@ -728,7 +815,7 @@ input {
 
 .touch-zone {
   position: absolute;
-  top: 38%;
+  top: 42%;
   bottom: 0;
   pointer-events: auto;
   touch-action: none;
@@ -736,18 +823,18 @@ input {
 
 .touch-zone-move {
   left: 0;
-  width: 44%;
+  width: 46%;
 }
 
 .touch-zone-look {
   right: 0;
-  width: 44%;
+  width: 46%;
 }
 
 .touch-stick {
   position: absolute;
-  width: 128px;
-  height: 128px;
+  width: 136px;
+  height: 136px;
   border-radius: 50%;
   border: 2px solid rgba(232, 223, 208, 0.32);
   background: rgba(0, 0, 0, 0.28);

@@ -15,12 +15,13 @@ export function HowToPlay({ onBack }: { onBack: () => void }) {
             <strong>PLAY WITH FRIEND.</strong> Create a room, share the code, both ready up. One Walker. One Watcher.
           </li>
           <li>
-            <strong>PC Walker:</strong> WASD move · mouse look (click the view) · Shift sprint · F flashlight · E use · R
-            radio (solo) · Esc pause
+            <strong>PC Walker:</strong> WASD move · mouse look (click the view) · Shift sprint (forward only) · F flashlight
+            · E use · R radio (solo) · Esc pause
           </li>
           <li>
-            <strong>Phone:</strong> left stick moves. Right stick looks (hold and tilt). RUN / RADIO left. USE / LIGHT
-            right. Optional GYRO in settings. PAUSE top-right. Chat is read-only on phones so the keyboard stays away.
+            <strong>Phone:</strong> left stick walks. Right side: swipe to look (like a mouse). RUN / RADIO left. USE /
+            LIGHT right. Optional GYRO in settings. PAUSE top-right. Chat is read-only on phones so the keyboard stays
+            away.
           </li>
           <li>
             <strong>Watcher:</strong> WASD fly · 1–4 frequencies · Q warn · hold SIGNAL at the exit

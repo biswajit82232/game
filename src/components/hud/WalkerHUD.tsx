@@ -25,13 +25,13 @@ export function WalkerHUD({
             <div>
               <div className="bar-label">STAMINA</div>
               <div className="bar">
-                {bar(snap.walker.stamina)} {Math.round(snap.walker.stamina)}%
+                {bar(snap.walker.stamina, 100, 7)} {Math.round(snap.walker.stamina)}%
               </div>
             </div>
             <div>
               <div className="bar-label">LIGHT</div>
               <div className="bar">
-                {bar(snap.walker.battery)} {Math.round(snap.walker.battery)}%
+                {bar(snap.walker.battery, 100, 7)} {Math.round(snap.walker.battery)}%
               </div>
             </div>
           </div>

@@ -18,12 +18,6 @@ export interface GameSettings {
 const KEY = "dta-settings";
 
 function defaultGraphics(): GraphicsQuality {
-  if (typeof window === "undefined") return "high";
-  try {
-    if (window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 1024) return "low";
-  } catch {
-    /* ignore */
-  }
   return "high";
 }
 
@@ -39,7 +33,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   subtitles: true,
   reduceMotion: false,
   invertLookY: false,
-  gyroLook: false,
+  gyroLook: true,
 };
 
 export function loadSettings(): GameSettings {
@@ -49,7 +43,14 @@ export function loadSettings(): GameSettings {
       const graphics = defaultGraphics();
       return { ...DEFAULT_SETTINGS, graphics, grain: graphics === "high" };
     }
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const merged = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } as GameSettings;
+    if (!localStorage.getItem("dta-gfx-v3") && merged.graphics === "low") {
+      merged.graphics = "high";
+      merged.grain = true;
+      localStorage.setItem("dta-gfx-v3", "1");
+      saveSettings(merged);
+    }
+    return merged;
   } catch {
     return { ...DEFAULT_SETTINGS, graphics: defaultGraphics() };
   }

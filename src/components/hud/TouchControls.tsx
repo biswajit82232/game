@@ -1,5 +1,6 @@
 import { useCallback, useRef, type PointerEvent } from "react";
 import type { Role } from "../../../shared/types";
+import { haptic } from "../../utils/haptic";
 
 function analogFrom(originX: number, originY: number, x: number, y: number, radius: number): { x: number; y: number } {
   let ax = (x - originX) / radius;
@@ -18,6 +19,7 @@ export function TouchControls({
   prompt,
   onMove,
   onLookAxis,
+  onLookDelta,
   onSprint,
   onInteract,
   onFlashlight,
@@ -31,7 +33,8 @@ export function TouchControls({
   solo?: boolean;
   prompt: string | null;
   onMove: (x: number, y: number) => void;
-  onLookAxis: (x: number, y: number) => void;
+  onLookAxis?: (x: number, y: number) => void;
+  onLookDelta?: (dx: number, dy: number) => void;
   onSprint: (held: boolean) => void;
   onInteract: () => void;
   onFlashlight: () => void;
@@ -47,6 +50,7 @@ export function TouchControls({
   const lookKnob = useRef<HTMLDivElement>(null);
   const moveOrigin = useRef<{ x: number; y: number; id: number } | null>(null);
   const lookOrigin = useRef<{ x: number; y: number; id: number } | null>(null);
+  const lookLast = useRef<{ x: number; y: number } | null>(null);
 
   const placeStick = (
     wrap: HTMLDivElement | null,
@@ -89,7 +93,7 @@ export function TouchControls({
   const onMoveDrag = (e: PointerEvent<HTMLDivElement>) => {
     const o = moveOrigin.current;
     if (!o || o.id !== e.pointerId) return;
-    const a = analogFrom(o.x, o.y, e.clientX, e.clientY, 58);
+    const a = analogFrom(o.x, o.y, e.clientX, e.clientY, 72);
     onMove(a.x, a.y);
     placeStick(moveRef.current, moveKnob.current, a.x, a.y, o);
   };
@@ -105,20 +109,29 @@ export function TouchControls({
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     lookOrigin.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
-    onLookAxis(0, 0);
+    lookLast.current = { x: e.clientX, y: e.clientY };
+    onLookAxis?.(0, 0);
     placeStick(lookRef.current, lookKnob.current, 0, 0, lookOrigin.current);
   };
   const onLookDrag = (e: PointerEvent<HTMLDivElement>) => {
     const o = lookOrigin.current;
     if (!o || o.id !== e.pointerId) return;
-    const a = analogFrom(o.x, o.y, e.clientX, e.clientY, 58);
-    onLookAxis(a.x, a.y);
+    const last = lookLast.current;
+    if (last) {
+      const dx = e.clientX - last.x;
+      const dy = e.clientY - last.y;
+      if (dx * dx + dy * dy > 0.15) onLookDelta?.(dx, dy);
+    }
+    lookLast.current = { x: e.clientX, y: e.clientY };
+    const a = analogFrom(o.x, o.y, e.clientX, e.clientY, 72);
+    onLookAxis?.(a.x, a.y);
     placeStick(lookRef.current, lookKnob.current, a.x, a.y, o);
   };
   const onLookUp = (e: PointerEvent<HTMLDivElement>) => {
     if (lookOrigin.current?.id !== e.pointerId) return;
     lookOrigin.current = null;
-    onLookAxis(0, 0);
+    lookLast.current = null;
+    onLookAxis?.(0, 0);
     resetStick(lookRef.current, lookKnob.current);
   };
 
@@ -140,6 +153,7 @@ export function TouchControls({
     e.preventDefault();
     e.stopPropagation();
     fn();
+    haptic(16);
   };
 
   return (
@@ -165,7 +179,7 @@ export function TouchControls({
       >
         <div ref={lookRef} className="touch-stick touch-stick-look">
           <div ref={lookKnob} className="touch-knob" />
-          <span className="touch-stick-label">LOOK</span>
+          <span className="touch-stick-label">SWIPE</span>
         </div>
       </div>
       {role === "walker" && (

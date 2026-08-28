@@ -1,6 +1,6 @@
 import { HorrorButton } from "../../ui/HorrorButton";
 
-const DUST = Array.from({ length: 28 }, (_, i) => i);
+const DUST = Array.from({ length: typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches ? 12 : 28 }, (_, i) => i);
 
 export function MainMenu({
   onSolo,

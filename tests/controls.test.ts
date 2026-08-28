@@ -39,4 +39,40 @@ describe("WalkerController", () => {
     c.step(0.2, "walker", 100);
     expect(c.x).toBeGreaterThan(0.2);
   });
+
+  it("does not look while input is locked", () => {
+    const c = new WalkerController();
+    c.pitch = 0;
+    c.inputEnabled = false;
+    c.applyLook(40, 40);
+    expect(c.pitch).toBe(0);
+    expect(c.yaw).toBe(0);
+  });
+
+  it("walks backward slower than forward", () => {
+    const fwd = new WalkerController();
+    const back = new WalkerController();
+    fwd.keys.add("KeyW");
+    back.keys.add("KeyS");
+    fwd.step(0.35, "walker", 100);
+    back.step(0.35, "walker", 100);
+    expect(Math.abs(fwd.z)).toBeGreaterThan(Math.abs(back.z) + 0.15);
+  });
+
+  it("clears stuck keys on reset", () => {
+    const c = new WalkerController();
+    c.keys.add("KeyW");
+    c.sprintHeld = true;
+    c.resetInput();
+    expect(c.keys.size).toBe(0);
+    expect(c.sprintHeld).toBe(false);
+  });
+
+  it("does not sprint while backing up", () => {
+    const c = new WalkerController();
+    c.keys.add("KeyS");
+    c.keys.add("ShiftLeft");
+    const { sprinting } = c.step(0.2, "walker", 100);
+    expect(sprinting).toBe(false);
+  });
 });

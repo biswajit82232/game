@@ -51,6 +51,7 @@ export function App() {
   const socketId = useRef("");
   const screenRef = useRef<Screen>(screen);
   const playRef = useRef<LastPlay>(readLastPlay() ?? { code: "", role: null });
+  const endTimerRef = useRef(0);
   screenRef.current = screen;
 
   const applySettings = (next: GameSettings) => {
@@ -157,9 +158,14 @@ export function App() {
     });
     socket.on("game:ended", (payload) => {
       setEnd(payload);
-      setScreen("results");
       playRef.current = { code: "", role: null };
       writeLastPlay(null);
+      window.clearTimeout(endTimerRef.current);
+      if (payload.title.includes("FOUND YOU")) {
+        endTimerRef.current = window.setTimeout(() => setScreen("results"), 2500);
+      } else {
+        setScreen("results");
+      }
       if (payload.ending === "loop") {
         setLoopTitle(true);
         window.setTimeout(() => setLoopTitle(false), 4000);
@@ -174,6 +180,7 @@ export function App() {
     if (socket.connected) onConnect();
 
     return () => {
+      window.clearTimeout(endTimerRef.current);
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error");
@@ -190,6 +197,7 @@ export function App() {
   }, []);
 
   const leave = () => {
+    window.clearTimeout(endTimerRef.current);
     getSocket().emit("room:leave");
     resetPlay();
     setScreen("menu");

@@ -9,6 +9,7 @@ describe("GameSession", () => {
     session.killWalker();
     expect(session.walker.alive).toBe(false);
     expect(session.ended?.title).toContain("HOLLOW");
+    expect(session.drainEvents().some((e) => e.type === "death")).toBe(true);
   });
 
   it("rejects puzzle input from the watcher", () => {

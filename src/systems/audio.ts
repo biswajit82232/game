@@ -144,6 +144,15 @@ export class AudioManager {
     this.noise(0.35, 0.14);
   }
 
+  jumpscare(): void {
+    this.scream();
+    this.noise(1.6, 0.32);
+    this.tone(42, 2.1, "sawtooth", 0.28);
+    this.tone(90, 1.4, "sawtooth", 0.2);
+    this.tone(1480, 0.35, "square", 0.12);
+    this.tone(220, 0.55, "square", 0.1);
+  }
+
   radio(): void {
     this.noise(0.25, 0.05);
     this.tone(310, 0.12, "square", 0.03);

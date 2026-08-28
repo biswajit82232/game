@@ -29,6 +29,7 @@ export function SettingsPanel({
               </HorrorButton>
             ))}
           </div>
+          <p className="muted hud-hint">HIGH is default on phones. If it stutters, the game drops resolution automatically. Use LOW only on older devices.</p>
         </div>
         <Toggle label="SCREEN SHAKE" on={settings.shake} onToggle={() => set({ shake: !settings.shake })} />
         <Toggle label="FILM GRAIN" on={settings.grain} onToggle={() => set({ grain: !settings.grain })} />

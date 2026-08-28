@@ -5,6 +5,7 @@ import { GameEngine } from "../../game/GameEngine";
 import { getSocket } from "../../multiplayer/socket";
 import { getAudio } from "../../systems/audio";
 import { isTouchPreferred } from "../../utils/touch";
+import { haptic } from "../../utils/haptic";
 import { WalkerHUD } from "../hud/WalkerHUD";
 import { WatcherHUD } from "../hud/WatcherHUD";
 import { Chat } from "../hud/Chat";
@@ -44,7 +45,9 @@ export function GameView({
   const [touch, setTouch] = useState(() => isTouchPreferred());
   const [looking, setLooking] = useState(false);
   const gyroRef = useRef<((ev: DeviceOrientationEvent) => void) | null>(null);
-  const chase = snapshot?.monster?.ai === "hunting" || snapshot?.monster?.ai === "attack";
+  const [foundScare, setFoundScare] = useState(false);
+  const chase =
+    !foundScare && (snapshot?.monster?.ai === "hunting" || snapshot?.monster?.ai === "attack");
 
   useEffect(() => {
     if (engineRef.current) engineRef.current.paused = paused || keypad || Boolean(note);
@@ -90,6 +93,10 @@ export function GameView({
     };
     const onEvent = ({ type }: { type: string }) => {
       applyGameEvent(type, engine);
+      if (type === "death") {
+        setFoundScare(true);
+        haptic(0, [40, 40, 90, 40, 120]);
+      }
       if (type === "watcher-distort" || type === "silhouette-flash") {
         setFx({ grain: 1, shake: 1 });
         window.setTimeout(() => setFx({ grain: 0, shake: 0 }), 1200);
@@ -131,7 +138,7 @@ export function GameView({
       engine.dispose();
       engineRef.current = null;
     };
-  }, [role]);
+  }, [role, settings.graphics]);
 
   useEffect(() => {
     if (snapshot) engineRef.current?.applySnapshot(snapshot);
@@ -148,21 +155,27 @@ export function GameView({
     <div className={`game-wrap${touch ? " is-touch" : ""}`}>
       <canvas ref={canvasRef} />
       {settings.grain && !settings.reduceMotion && settings.graphics === "high" && (
-        <div className="grain" style={{ opacity: 0.06 + fx.grain * 0.1 }} />
+        <div className="grain" style={{ opacity: (touch ? 0.035 : 0.055) + fx.grain * 0.1 }} />
       )}
       <div className="vignette" />
       {role === "watcher" && <div className="watcher-fx" />}
       {chase && <div className="chase-scare" />}
+      {foundScare && (
+        <div className={`jumpscare${settings.reduceMotion ? " is-still" : ""}`} aria-hidden>
+          <img className="jumpscare-face" src="/assets/textures/hollow-jumpscare.png" alt="" />
+          <div className="jumpscare-flash" />
+        </div>
+      )}
       {!snapshot && (
         <div className="prompt">LOADING THE BUILDING…</div>
       )}
       {snapshot && !touch && !looking && !paused && !keypad && !note && !prompt && (
         <div className="prompt">CLICK TO LOOK · WASD MOVE · SHIFT RUN</div>
       )}
-      {snapshot && role === "walker" && (
+      {snapshot && role === "walker" && !foundScare && (
         <WalkerHUD snap={snapshot} prompt={prompt} otherAlive={!disconnected} touch={touch} />
       )}
-      {snapshot && role === "watcher" && (
+      {snapshot && role === "watcher" && !foundScare && (
         <WatcherHUD
           snap={snapshot}
           touch={touch}
@@ -171,14 +184,16 @@ export function GameView({
           onHold={(holding) => socket.emit("player:holdSignal", { holding })}
         />
       )}
-      <Chat compact={touch} messages={messages} onSend={(text) => socket.emit("player:chat", { text })} />
-      {touch && (
+      {!foundScare && (
+        <Chat compact={touch} messages={messages} onSend={(text) => socket.emit("player:chat", { text })} />
+      )}
+      {touch && !foundScare && (
         <TouchControls
           role={role}
           solo={Boolean(snapshot?.solo)}
           prompt={prompt}
           onMove={(x, y) => engineRef.current?.controller.setMoveAxis(x, y)}
-          onLookAxis={(x, y) => engineRef.current?.controller.setLookAxis(x, y)}
+          onLookDelta={(dx, dy) => engineRef.current?.controller.applyLook(dx, dy, 2.15)}
           onSprint={(held) => {
             if (engineRef.current) engineRef.current.controller.sprintHeld = held;
           }}
@@ -287,7 +302,13 @@ export function applyGameEvent(
       engine.effects.trigger("shake", 0.5, 1);
       audio.scare();
     }
-  } else if (type === "death" || type === "silhouette-flash") {
+  } else if (type === "death") {
+    engine.startJumpscare();
+    engine.effects.trigger("shake", 2.4, 1);
+    engine.effects.trigger("heartbeat", 2.4, 1);
+    audio.jumpscare();
+    haptic(0, [30, 20, 80]);
+  } else if (type === "silhouette-flash") {
     engine.effects.trigger("shake", 0.5, 1);
     engine.effects.trigger("heartbeat", 2, 1);
     audio.scare();
@@ -297,6 +318,7 @@ export function applyGameEvent(
     audio.laugh();
     audio.scream();
     audio.scare();
+    haptic(0, [18, 40, 18, 40, 30]);
   } else if (type === "watcher-distort" || type === "static") {
     engine.effects.trigger("static", 1.5, 1);
     audio.noise(0.4, 0.06);

@@ -22,22 +22,33 @@ export function WatcherHUD({
   touch?: boolean;
 }) {
   return (
-    <div className="hud">
+    <div className={`hud${touch ? " hud-touch" : ""}`}>
       <div className="hud-top">
-        <div className="bar-label">PLAYER STATUS</div>
         <div>WALKER: {snap.walker.alive ? "ALIVE" : "LOST"}</div>
       </div>
       <div className="hud-tl">
         <div className="bar-label">OBJECTIVE</div>
         <div>{snap.objective.text}</div>
-        {snap.secretObjective && <p className="secret">SECRET: {snap.secretObjective}</p>}
+        {snap.secretObjective && !touch && <p className="secret">SECRET: {snap.secretObjective}</p>}
+        {touch && (
+          <div className="hud-mini-bars">
+            <div>
+              <div className="bar-label">ENERGY</div>
+              <div className="bar">
+                {bar(snap.watcher.energy, 100, 7)} {Math.round(snap.watcher.energy)}%
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      <div className="hud-bl">
-        <div className="bar-label">ENERGY</div>
-        <div className="bar">
-          {bar(snap.watcher.energy)} {Math.round(snap.watcher.energy)}%
+      {!touch && (
+        <div className="hud-bl">
+          <div className="bar-label">ENERGY</div>
+          <div className="bar">
+            {bar(snap.watcher.energy)} {Math.round(snap.watcher.energy)}%
+          </div>
         </div>
-      </div>
+      )}
       <div className="hud-br">
         <div className="bar-label">SIGNAL</div>
         <div>{snap.watcher.modeCooldown > 0 ? "COOLING" : "STABLE"}</div>
@@ -50,26 +61,26 @@ export function WatcherHUD({
               className={snap.watcher.mode === m.id ? "active" : ""}
               onClick={() => onMode(m.id)}
             >
-              {m.key} {m.label}
+              {touch ? m.label : `${m.key} ${m.label}`}
             </button>
           ))}
         </div>
-        {snap.watcher.mode === "spirit" && (
+        {!touch && snap.watcher.mode === "spirit" && (
           <p className="muted" style={{ marginTop: 8 }}>
             SPIRIT: marks burn on the security wall.
           </p>
         )}
-        {snap.watcher.mode === "echo" && (
+        {!touch && snap.watcher.mode === "echo" && (
           <p className="muted" style={{ marginTop: 8 }}>
             ECHO: afterimage of The Hollow.
           </p>
         )}
-        {snap.watcher.mode === "danger" && (
+        {!touch && snap.watcher.mode === "danger" && (
           <p className="muted" style={{ marginTop: 8 }}>
             DANGER: gold breaker is safe. Red wakes it.
           </p>
         )}
-        {snap.watcher.mode === "normal" && (
+        {!touch && snap.watcher.mode === "normal" && (
           <p className="muted" style={{ marginTop: 8 }}>
             NORMAL: grainy ping. Switch frequency to see.
           </p>
