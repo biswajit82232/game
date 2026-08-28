@@ -1,0 +1,2 @@
+# Drop real audio files here (mp3/ogg/wav). The game uses the Web Audio API for placeholder sound until then.
+# Suggested names: ambient.ogg, footsteps.ogg, heartbeat.ogg, hollow.ogg, whisper.ogg
