@@ -30,6 +30,7 @@ import {
   WATCHER_FLY_SPEED,
   BEHIND_LOOK_ANGLE,
   BEHIND_LOOK_HOLD,
+  HUNT_GRACE_SECONDS,
 } from "../../shared/constants";
 import {
   DOORWAYS,
@@ -624,9 +625,11 @@ export class GameSession {
     if (this.monster.state.behindWalker && this.walkerLookedBack) {
       result.caught = true;
     }
-    if (result.caught && this.time < 20 && !this.walkerLookedBack) {
+    if (result.caught && this.time < HUNT_GRACE_SECONDS && !this.walkerLookedBack) {
       result.caught = false;
       this.monster.state.ai = "retreat";
+      this.monster.stateTimer = 5;
+      this.monster.target = null;
     }
     if (result.caught) {
       this.killWalker();
@@ -637,7 +640,7 @@ export class GameSession {
     if (hunting && this.monster.state.visibleToWalker && !this.chaseScreamed) {
       this.chaseScreamed = true;
       this.pushEvent("chase-scare", "IT SEES YOU.", 1, "both");
-      this.showSubtitle(this.solo ? "ELI: RUN. DON'T LOOK AT IT." : "DON'T TURN AROUND.", 3);
+      this.showSubtitle(this.solo ? "ELI: RUN. FLASHLIGHT AND KEEP MOVING." : "IT'S HUNTING — RUN.", 3);
     }
     if (!hunting) this.chaseScreamed = false;
 

@@ -10,6 +10,7 @@ export interface MonsterBrain {
   behindCooldown: number;
   encounters: number;
   lastNoise: Vec3 | null;
+  elapsed: number;
 }
 
 export function createMonster(): MonsterBrain {
@@ -24,28 +25,31 @@ export function createMonster(): MonsterBrain {
       behindTimer: 0,
     },
     target: null,
-    stateTimer: 4 + Math.random() * 6,
-    behindCooldown: 12,
+    stateTimer: 8 + Math.random() * 8,
+    behindCooldown: 18,
     encounters: 0,
     lastNoise: null,
+    elapsed: 0,
   };
 }
 
-function pickState(noise: boolean, close: boolean): MonsterAiState {
+function pickState(noise: boolean, close: boolean, elapsed: number): MonsterAiState {
   const roll = Math.random();
+  const early = elapsed < 45;
   if (noise) {
     if (roll < 0.55) return "investigating";
-    if (roll < 0.8) return "stalking";
+    if (roll < 0.82) return "stalking";
     return "observing";
   }
   if (close) {
-    if (roll < 0.5) return "observing";
-    if (roll < 0.78) return "stalking";
-    if (roll < 0.9) return "hunting";
+    if (roll < 0.55) return "observing";
+    if (roll < 0.82) return "stalking";
+    if (roll < 0.9 && !early) return "hunting";
     return "idle";
   }
-  if (roll < 0.7) return "observing";
-  if (roll < 0.9) return "stalking";
+  if (roll < 0.72) return "observing";
+  if (roll < 0.92) return "stalking";
+  if (early) return "idle";
   return "hunting";
 }
 
@@ -67,6 +71,7 @@ export function tickMonster(
   noise: Vec3 | null,
 ): { caught: boolean; startedBehind: boolean } {
   const m = brain.state;
+  brain.elapsed += dt;
   brain.stateTimer -= dt;
   brain.behindCooldown -= dt;
   if (noise) brain.lastNoise = noise;
@@ -91,8 +96,8 @@ export function tickMonster(
 
   if (brain.stateTimer <= 0 && m.ai !== "attack") {
     const d = Math.sqrt(dist2(m.position.x, m.position.z, walker.x, walker.z));
-    m.ai = pickState(Boolean(brain.lastNoise), d < 10);
-    brain.stateTimer = 3 + Math.random() * 7;
+    m.ai = pickState(Boolean(brain.lastNoise), d < 10, brain.elapsed);
+    brain.stateTimer = 4 + Math.random() * 7;
     const noisePoint = brain.lastNoise;
     brain.lastNoise = null;
     if (m.ai === "observing") brain.target = { x: walker.x, y: 0, z: walker.z };
@@ -109,9 +114,9 @@ export function tickMonster(
   }
 
   let speed = 0.9;
-  if (m.ai === "stalking") speed = 1.6;
-  if (m.ai === "investigating") speed = 2.1;
-  if (m.ai === "hunting") speed = 4.4;
+  if (m.ai === "stalking") speed = 1.55;
+  if (m.ai === "investigating") speed = 2.0;
+  if (m.ai === "hunting") speed = 3.6;
   if (m.ai === "retreat") speed = 4.2;
   if (m.ai === "observing") speed = 0.35;
   if (m.ai === "idle") speed = 0.15;
@@ -125,6 +130,10 @@ export function tickMonster(
       brain.stateTimer = 1.6 + Math.random();
       brain.target = roamPoint();
     }
+  }
+  // Beam slows a hunt if aimed nearby — not an off switch, but buys time.
+  if (flashlightOn && hunting && dist < 5.5) {
+    speed *= 0.72;
   }
 
   const rawTarget =
@@ -152,9 +161,10 @@ export function tickMonster(
     hunting || (m.ai === "stalking" && distNow < 4 && Math.random() < 0.02);
 
   let startedBehind = false;
-  const behindChance = flashlightOn ? 0.006 : 0.014;
+  const behindChance = flashlightOn ? 0.004 : 0.01;
   if (
     brain.behindCooldown <= 0 &&
+    brain.elapsed > 25 &&
     (m.ai === "stalking" || m.ai === "observing") &&
     distNow > 3 &&
     Math.random() < behindChance
@@ -163,12 +173,12 @@ export function tickMonster(
     m.behindTimer = 4.2;
     m.visibleToWalker = false;
     m.ai = "stalking";
-    brain.behindCooldown = 22 + Math.random() * 18;
+    brain.behindCooldown = 26 + Math.random() * 18;
     brain.encounters += 1;
     startedBehind = true;
   }
 
-  if (m.ai === "hunting" && distNow < 1.15) {
+  if (m.ai === "hunting" && distNow < 1.05) {
     m.ai = "attack";
     return { caught: true, startedBehind };
   }

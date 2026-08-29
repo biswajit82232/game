@@ -260,22 +260,33 @@ describe("GameSession", () => {
     expect(session.ended).not.toBeNull();
   });
 
-  it("blocks walking through a closed unlocked office door", () => {
+  it("blocks walking through a locked office door but not an unlocked closed one", () => {
     const session = new GameSession(true);
     const officeDoor = session.doors.find((d) => d.id === "door-hallway-office")!;
-    officeDoor.locked = false;
-    officeDoor.open = false;
-    const walls = [...WALLS, ...doorBlockers(session.doors)];
+    expect(officeDoor.locked).toBe(true);
+    expect(officeDoor.open).toBe(false);
+    const wallsLocked = [...WALLS, ...doorBlockers(session.doors)];
     const hall = getRoomById("hallway")!;
     let x = hall.cx + hall.hw - 0.6;
     let z = hall.cz;
     for (let i = 0; i < 40; i++) {
-      const next = resolveMove(x, z, 0.4, 0, 0.35, walls);
+      const next = resolveMove(x, z, 0.4, 0, 0.35, wallsLocked);
       x = next.x;
       z = next.z;
     }
     expect(getRoomAt(x, z)?.id).not.toBe("office");
-    expect(x).toBeLessThan(getRoomById("office")!.cx - getRoomById("office")!.hw);
+
+    officeDoor.locked = false;
+    officeDoor.open = false;
+    const wallsOpenPath = [...WALLS, ...doorBlockers(session.doors)];
+    x = hall.cx + hall.hw - 0.6;
+    z = hall.cz;
+    for (let i = 0; i < 40; i++) {
+      const next = resolveMove(x, z, 0.4, 0, 0.35, wallsOpenPath);
+      x = next.x;
+      z = next.z;
+    }
+    expect(getRoomAt(x, z)?.id).toBe("office");
   });
 
   it("solo exit objective does not tell the Walker to Hold R", () => {

@@ -29,7 +29,11 @@ export const ROOM_CODE_LENGTH = 5;
 
 export const BEHIND_EVENT_DURATION = 4.2;
 export const BEHIND_EVENT_MIN_INTERVAL = 18;
-export const BEHIND_LOOK_ANGLE = 0.44;
-export const BEHIND_LOOK_HOLD = 0.4;
+/** Must face within this many radians of the rear to count as looking back. */
+export const BEHIND_LOOK_ANGLE = 0.32;
+/** Hold that facing this long before it counts (stops stick/mouse twitch kills). */
+export const BEHIND_LOOK_HOLD = 0.7;
+/** Hunt catches are ignored until this many seconds into a round. */
+export const HUNT_GRACE_SECONDS = 55;
 
 export const TRUST_START = 100;
