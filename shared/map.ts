@@ -98,7 +98,9 @@ export function doorwayCenter(def: DoorwayDef): { x: number; z: number; yaw: num
   const p = doorOnRoom(a, b);
   const dx = b.cx - a.cx;
   const dz = b.cz - a.cz;
-  return { x: p.x, z: p.z, yaw: Math.abs(dx) > Math.abs(dz) ? 0 : Math.PI / 2 };
+  // Door meshes are wide on local X / thin on local Z. East–west openings span world Z,
+  // so they need yaw = π/2; north–south openings span world X and use yaw = 0.
+  return { x: p.x, z: p.z, yaw: Math.abs(dx) > Math.abs(dz) ? Math.PI / 2 : 0 };
 }
 
 export function roomPath(fromId: string, toId: string): string[] {

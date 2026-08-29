@@ -185,7 +185,8 @@ export function buildWorld(quality: "low" | "high", anisotropy = 4): WorldHandle
     group.add(door);
     if (d.isExit) {
       const sign = makeExitSign();
-      const along = c.yaw === 0 ? { x: 0, z: 0.14 } : { x: 0.14, z: 0 };
+      // Offset sign slightly into the office side of the opening.
+      const along = Math.abs(c.yaw) < 0.1 ? { x: 0, z: 0.14 } : { x: 0.14, z: 0 };
       sign.position.set(c.x + along.x, 2.6, c.z + along.z);
       sign.rotation.y = c.yaw;
       group.add(sign);
@@ -215,9 +216,10 @@ export function syncDoors(handles: WorldHandles, doors: DoorState[]): void {
   for (const d of doors) {
     const mesh = handles.doors.get(d.id);
     if (!mesh) continue;
-    const yaw = (mesh.userData.closedYaw as number) ?? mesh.rotation.y;
+    const yaw = (mesh.userData.closedYaw as number) ?? 0;
     mesh.visible = true;
-    mesh.rotation.y = d.open ? yaw + 1.55 : yaw;
+    // ~95° swing clears the opening once closedYaw matches the wall plane.
+    mesh.rotation.y = d.open ? yaw + 1.65 : yaw;
   }
 }
 

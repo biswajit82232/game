@@ -324,4 +324,11 @@ describe("GameSession", () => {
       Math.hypot(session.monster.state.position.x - start.x, session.monster.state.position.z - start.z) > 0.05;
     expect(moved || room?.id === "entrance" || room?.id === "ritual").toBe(true);
   });
+
+  it("orients east–west door meshes across the opening, not along the hallway", () => {
+    const east = doorwayCenter(DOORWAYS.find((d) => d.id === "door-entrance-reception")!)!;
+    const north = doorwayCenter(DOORWAYS.find((d) => d.id === "door-reception-security")!)!;
+    expect(east.yaw).toBeCloseTo(Math.PI / 2, 5);
+    expect(north.yaw).toBeCloseTo(0, 5);
+  });
 });
