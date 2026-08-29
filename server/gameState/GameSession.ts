@@ -176,7 +176,10 @@ export class GameSession {
   }
 
   private spawnItems(): ItemState[] {
-    const keyRoom = KEY_SPAWN_ROOMS[Math.floor(Math.random() * KEY_SPAWN_ROOMS.length)]!;
+    // Solo: key always in reception so the path stays simple.
+    const keyRoom = this.solo
+      ? "reception"
+      : KEY_SPAWN_ROOMS[Math.floor(Math.random() * KEY_SPAWN_ROOMS.length)]!;
     const at = (
       roomId: string,
       dx: number,
@@ -282,6 +285,7 @@ export class GameSession {
         }
       }
       if (room?.id === "generator") this.advanceObjective("obj-generator");
+      if (room?.id === "security" && this.solo) this.eliToldSymbols = true;
       if (room?.id === "children") {
         if (this.secretKind === "children" && !this.officeEntered) {
           this.secretComplete = true;
@@ -343,29 +347,19 @@ export class GameSession {
       }
       return;
     }
-    this.signalCooldown = 9;
+    this.signalCooldown = 7;
     const room = this.getRoomId();
     if (!this.generatorOn && (room === "generator" || room === "hallway")) {
-      this.botSay(`The safe breaker is number ${this.powerSafeSwitch + 1}. Leave the others. Please.`);
+      this.botSay("Any breaker works. Flip one and keep moving.");
     } else if (!this.puzzles.find((p) => p.id === "symbols")?.solved && (room === "security" || room === "reception")) {
-      if (Math.random() < 0.22) {
-        this.botSay("The lock… I have the sequence. Wait. Look at the wall yourself. I might be lying.");
-      } else {
-        this.eliToldSymbols = true;
-        this.botSay(`Sequence: ${this.symbolSolution.join(", ")}. I think. I hope.`);
-      }
+      this.eliToldSymbols = true;
+      this.botSay(`Sequence: ${this.symbolSolution.join(", ")}.`);
     } else if (!this.walker.inventory.includes("office-key")) {
-      this.botSay("The office key isn't in the office. Check storage, basement, children's room, or reception.");
-    } else if (room === "children") {
-      this.botSay("Don't stay here. The beds aren't empty even when they look empty.");
-    } else if (room === "ritual") {
-      this.botSay("Get out. That room is not for walking.");
-    } else if (room === "basement") {
-      this.botSay("Basement pipes carry more than water. Listen for the recording.");
+      this.botSay("The office key is on the reception desk.");
     } else if (room === "office" || room === "exit") {
-      this.botSay("I'll hold the exit open. Use the panel by the red door. Then run.");
+      this.botSay("Use the red exit panel. I've got the signal.");
     } else {
-      this.botSay("Keep going east from the entrance. Generator is north of the hallway. Don't open anything that smiles.");
+      this.botSay("East from entrance → hallway. Generator north. Key at reception. Keypad in security.");
     }
   }
 
@@ -470,17 +464,13 @@ export class GameSession {
         return;
       }
       const index = Number(item.id.split("-")[1]);
-      if (!isSafeSwitch(index, this.powerSafeSwitch)) {
+      // Solo: any breaker works. Co-op: only the safe one.
+      if (!this.solo && !isSafeSwitch(index, this.powerSafeSwitch)) {
         this.pushEvent("shock", "The breaker screams. Wrong one.", 0.7, "walker");
         this.lastNoise = { x: item.position.x, y: 0, z: item.position.z };
-        this.monster.state.ai = "hunting";
-        this.walker.health -= 8;
-        this.showSubtitle("Wrong breaker. The shock bites.", 3);
-        if (this.walker.health <= 0) {
-          this.killWalker();
-          return;
-        }
-        if (this.solo) this.botGenAt = this.time + 0.6;
+        this.monster.state.ai = "stalking";
+        this.walker.health -= 5;
+        this.showSubtitle("Wrong breaker. Try another.", 3);
         return;
       }
       this.puzzles.find((p) => p.id === "switches")!.solved = true;
@@ -488,17 +478,27 @@ export class GameSession {
       this.generatorOn = true;
       for (const l of this.lights) l.on = true;
       this.pushEvent("power", "The building hums back to life.", 0.45, "both");
-      this.showSubtitle("Power restored. Lights flicker on.");
+      this.showSubtitle("Power restored.");
       this.advanceObjective("obj-power");
     } else if (item.type === "generator") {
       this.advanceObjective("obj-generator");
-      this.pushEvent("hint", "Three breakers. Only one is safe.", 0.2, "walker");
-      this.showSubtitle("Three breakers. Only one is safe.");
+      if (this.solo) {
+        this.pushEvent("hint", "Flip any breaker to restore power.", 0.2, "walker");
+        this.showSubtitle("Flip any breaker to restore power.");
+      } else {
+        this.pushEvent("hint", "Three breakers. Only one is safe.", 0.2, "walker");
+        this.showSubtitle("Three breakers. Only one is safe.");
+      }
     } else if (item.type === "exit") {
       this.tryOpenExit();
     } else if (item.type === "keypad") {
-      this.pushEvent("keypad", "A four-symbol lock. The sequence is not written here.", 0.1, "walker");
-      this.showSubtitle("A four-symbol lock. Ask the Signal — carefully.");
+      if (this.solo) {
+        this.eliToldSymbols = true;
+        this.showSubtitle(`Keypad: ${this.symbolSolution.join(" → ")}`, 8);
+      } else {
+        this.pushEvent("keypad", "A four-symbol lock. Ask your Watcher.", 0.1, "walker");
+        this.showSubtitle("Ask the Watcher for the sequence.");
+      }
     }
   }
 
@@ -681,33 +681,17 @@ export class GameSession {
       this.botSay("Hold the Signal if you need me. And whatever happens... don't turn around.");
     }
     if (roomId === "security" && !this.puzzles.find((p) => p.id === "symbols")?.solved && this.time >= this.botKeyedAt) {
-      this.botKeyedAt = this.time + 18;
-      if (Math.random() < 0.18) {
-        this.botSay("The lock... wait. I think I have it. No. Look at the wall. I might be wrong.");
-      } else {
-        this.eliToldSymbols = true;
-        this.botSay(`Okay. The lock. Sequence: ${this.symbolSolution.join(", ")}.`);
-      }
-    }
-    if (roomId === "children" && this.eliBeat >= 4 && this.time >= this.botKeyedAt + 4) {
       this.botKeyedAt = this.time + 22;
-      this.botSay("Leave the children's room. Beds that aren't empty don't need sleepers.");
-    }
-    if (roomId === "ritual" && this.eliBeat >= 4 && this.time >= this.botGenAt) {
-      this.botGenAt = this.time + 28;
-      this.botSay("Out. Now. That room is not for walking.");
-    }
-    if (roomId === "basement" && this.eliBeat >= 4 && this.time >= this.botKeyedAt + 8) {
-      this.botKeyedAt = this.time + 30;
-      this.botSay("The pipes carry more than water. Find the recording if you can.");
+      this.eliToldSymbols = true;
+      this.botSay(`Keypad sequence: ${this.symbolSolution.join(", ")}.`);
     }
     if (roomId === "generator" && !this.generatorOn && this.time >= this.botGenAt) {
-      this.botGenAt = this.time + 16;
-      this.botSay(`I can see the breakers. Safe one is number ${this.powerSafeSwitch + 1}. I think.`);
+      this.botGenAt = this.time + 14;
+      this.botSay("Any breaker. Flip one.");
     }
     if (roomId === "office" && !this.botOffice) {
       this.botOffice = true;
-      this.botSay("I'll hold the exit signal. Use the panel by the red door. Then we both leave. Supposedly.");
+      this.botSay("Exit panel by the red door. I'll hold it.");
     }
   }
 
@@ -918,16 +902,17 @@ export class GameSession {
 
   private currentObjective(): ObjectiveState {
     const o = this.objectives.find((x) => !x.done) ?? this.objectives[this.objectives.length - 1]!;
-    if (!this.solo) return o;
-    if (o.id === "obj-exit") {
-      return { ...o, text: "Use the exit panel by the red door. Eli holds the signal." };
+    if (!this.solo) {
+      if (o.id === "obj-exit") return { ...o, text: "Exit: Walker uses panel, Watcher holds SIGNAL." };
+      return o;
     }
-    if (o.id === "obj-escape") {
-      return { ...o, text: "Reach the exit. Eli holds the far side." };
-    }
-    if (o.id === "obj-puzzle") {
-      return { ...o, text: "Solve the security keypad. Ask Eli if you must." };
-    }
+    if (o.id === "obj-generator") return { ...o, text: "1/4 Go north of the hallway → generator." };
+    if (o.id === "obj-power") return { ...o, text: "1/4 Flip any breaker." };
+    if (o.id === "obj-key") return { ...o, text: "2/4 Grab the key on the reception desk." };
+    if (o.id === "obj-puzzle") return { ...o, text: "3/4 Security keypad — Eli gives the code." };
+    if (o.id === "obj-office") return { ...o, text: "Unlock the office with the key." };
+    if (o.id === "obj-exit") return { ...o, text: "4/4 Use the red exit panel. Eli holds signal." };
+    if (o.id === "obj-escape") return { ...o, text: "Walk into the exit room." };
     return o;
   }
 

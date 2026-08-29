@@ -355,23 +355,29 @@ export function applyGameEvent(
     if (type === "behind") {
       engine.effects.trigger("shake", 0.5, 1);
       audio.scare();
+      engine.strikeLightning(0.9);
+      audio.thunder();
     }
   } else if (type === "death") {
     engine.startJumpscare();
     engine.effects.trigger("shake", 2.4, 1);
     engine.effects.trigger("heartbeat", 2.4, 1);
     audio.jumpscare();
+    audio.thunder();
     haptic(0, [30, 20, 80]);
   } else if (type === "silhouette-flash" || type === "shadow-cross" || type === "coat-scare") {
     engine.effects.trigger("shake", 0.5, 1);
     engine.effects.trigger("heartbeat", 2, 1);
     audio.scare();
+    engine.strikeLightning(0.55);
   } else if (type === "chase-scare") {
     engine.effects.trigger("shake", 1.4, 1);
     engine.effects.trigger("heartbeat", 4, 1);
     audio.laugh();
     audio.scream();
     audio.scare();
+    audio.thunder();
+    engine.strikeLightning(1.2);
     haptic(0, [18, 40, 18, 40, 30]);
   } else if (type === "watcher-distort" || type === "static" || type === "lights-out") {
     engine.effects.trigger("static", 1.5, 1);

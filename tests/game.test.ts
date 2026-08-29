@@ -226,22 +226,23 @@ describe("GameSession", () => {
     expect(p.x).not.toBe(entrance.cx);
   });
 
-  it("does not leak the keypad when Eli claims to be lying", () => {
-    let lied = false;
-    for (let i = 0; i < 120 && !lied; i++) {
-      const s = new GameSession(true);
-      s.walker.position = { x: getRoomById("security")!.cx, y: 1.6, z: getRoomById("security")!.cz };
-      (s as unknown as { signalCooldown: number }).signalCooldown = 0;
-      s.tuneSignal(true);
-      s.tuneSignal(false);
-      const chats = s.drainChats();
-      if (chats.some((c) => c.text.includes("lying"))) {
-        lied = true;
-        expect((s as unknown as { eliToldSymbols: boolean }).eliToldSymbols).toBe(false);
-        expect(s.snapshotFor("walker").symbolSolution).toBeNull();
-      }
-    }
-    expect(lied).toBe(true);
+  it("solo always reveals the keypad without lying", () => {
+    const s = new GameSession(true);
+    s.walker.position = { x: getRoomById("security")!.cx, y: 1.6, z: getRoomById("security")!.cz };
+    (s as unknown as { signalCooldown: number }).signalCooldown = 0;
+    s.tuneSignal(true);
+    s.tuneSignal(false);
+    expect((s as unknown as { eliToldSymbols: boolean }).eliToldSymbols).toBe(true);
+    expect(s.snapshotFor("walker").symbolSolution).toEqual(s.symbolSolution);
+  });
+
+  it("solo accepts any generator breaker", () => {
+    const session = new GameSession(true);
+    const wrong = session.powerSafeSwitch === 0 ? 1 : 0;
+    const sw = session.items.find((i) => i.id === `switch-${wrong}`)!;
+    session.walker.position = { x: sw.position.x, y: 1.6, z: sw.position.z };
+    session.interact("walker", sw.id);
+    expect(session.generatorOn).toBe(true);
   });
 
   it("keeps the exit open once unlocked and still wins", () => {
@@ -296,7 +297,7 @@ describe("GameSession", () => {
     }
     const text = session.snapshotFor("walker").objective.text;
     expect(text.toLowerCase()).not.toContain("hold r");
-    expect(text.toLowerCase()).toMatch(/panel|eli/);
+    expect(text.toLowerCase()).toMatch(/panel|eli|exit/);
   });
 
   it("keeps a hunting Hollow inside rooms while closing", () => {

@@ -5,34 +5,26 @@ export function HowToPlay({ onBack }: { onBack: () => void }) {
     <div className="screen menu-overlay">
       <div className="panel">
         <h2>HOW TO PLAY</h2>
-        <p className="muted">Information is the resource. Trust is optional.</p>
+        <p className="muted">Short path. Get out. Don’t turn around when it stands behind you.</p>
         <ul className="how-list">
           <li>
-            <strong>PLAY SOLO — The Lonely Signal.</strong> You walk the building. Eli talks through an old radio. Hold{" "}
-            <strong>R</strong> or <strong>RADIO</strong> to ask him. He is not always right.
+            <strong>Solo:</strong> Walk the building. Eli helps on the radio (<strong>R</strong> / RADIO).
           </li>
           <li>
-            <strong>PLAY WITH FRIEND.</strong> Create a room, share the code, both ready up. One Walker. One Watcher.
+            <strong>Escape in 4 steps:</strong> Flip a generator breaker → grab the reception key → enter the security
+            keypad code → use the office exit panel.
           </li>
           <li>
-            <strong>PC Walker:</strong> WASD move · mouse look (click the view) · Shift sprint (forward only) · F flashlight
-            · E use · R radio (solo) · Esc pause
+            <strong>Move:</strong> WASD · mouse look · Shift run · F light · E use. Phone: sticks + USE / LIGHT.
           </li>
           <li>
-            <strong>Phone:</strong> left stick walks. Right side: swipe to look (like a mouse). RUN / RADIO left. USE /
-            LIGHT right. Optional GYRO in settings. PAUSE top-right. Chat is read-only on phones so the keyboard stays
-            away.
+            <strong>With a friend:</strong> One Walker, one Watcher. Watcher holds SIGNAL at the exit. Warn with Q when
+            something is behind them.
           </li>
           <li>
-            <strong>Watcher:</strong> WASD fly · 1–4 frequencies · Q warn · hold SIGNAL at the exit
+            <strong>The Hollow:</strong> If it hunts, you’ll see the ghost — run. Lightning means it’s close. If you’re
+            told not to turn around, don’t.
           </li>
-          <li>
-            Layout: Vestibule into the reception lobby, then a long corridor east. Security north of the lobby. Storage
-            and basement south. Generator and a sealed chamber north of the corridor. Locked office and exit at the far
-            east end.
-          </li>
-          <li>If something stands behind you: do not turn around unless you trust the warning.</li>
-          <li>When it hunts, you will see it. Run. Do not stare.</li>
         </ul>
         <HorrorButton onClick={onBack}>BACK</HorrorButton>
       </div>

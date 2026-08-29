@@ -75,6 +75,10 @@ export class GameEngine {
   private bob = 0;
   private camRoll = 0;
   private mobileGfx = false;
+  private lightning: THREE.PointLight;
+  private lightningBolt: THREE.Mesh;
+  private lightningT = 0;
+  private stormAcc = 0;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -130,11 +134,28 @@ export class GameEngine {
       const mat = mesh.material as THREE.MeshStandardMaterial | undefined;
       if (mat && "opacity" in mat) {
         mat.transparent = true;
-        mat.opacity = 0.32;
+        mat.opacity = 0.28;
       }
     });
     this.echoHollow.visible = false;
     this.scene.add(this.echoHollow);
+
+    this.lightning = new THREE.PointLight(0xddeeff, 0, 48, 1.4);
+    this.lightning.position.set(12, 14, -4);
+    this.scene.add(this.lightning);
+    this.lightningBolt = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.35, 14),
+      new THREE.MeshBasicMaterial({
+        color: 0xe8f4ff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    this.lightningBolt.position.set(8, 8, -2);
+    this.lightningBolt.visible = false;
+    this.scene.add(this.lightningBolt);
 
     this.flashlight = new THREE.SpotLight(
       0xffe2b8,
@@ -245,6 +266,28 @@ export class GameEngine {
     this.effects.trigger("shake", 2.4, 1);
     this.effects.trigger("heartbeat", 2.4, 1);
     this.effects.trigger("flash", 0.35, 1);
+    this.strikeLightning(1.4);
+  }
+
+  /** Brief white-blue sky flash + bolt near The Hollow / the player. */
+  strikeLightning(intensity = 1): void {
+    if (this.settings.reduceMotion) {
+      this.lightning.intensity = 18 * intensity;
+      this.lightningT = 0.12;
+      return;
+    }
+    const hx = this.hollow.visible ? this.hollow.position.x : this.camera.position.x;
+    const hz = this.hollow.visible ? this.hollow.position.z : this.camera.position.z;
+    this.lightning.position.set(hx + (Math.random() - 0.5) * 6, 12 + Math.random() * 4, hz + (Math.random() - 0.5) * 6);
+    this.lightning.intensity = 42 * intensity;
+    this.lightningT = 0.18 + Math.random() * 0.12;
+    this.lightningBolt.position.set(this.lightning.position.x, 7, this.lightning.position.z);
+    this.lightningBolt.rotation.y = Math.random() * Math.PI;
+    this.lightningBolt.rotation.z = (Math.random() - 0.5) * 0.35;
+    this.lightningBolt.visible = true;
+    const mat = this.lightningBolt.material as THREE.MeshBasicMaterial;
+    mat.opacity = 0.85 * intensity;
+    this.renderer.toneMappingExposure = Math.min(2.4, this.renderer.toneMappingExposure + 0.55 * intensity);
   }
 
   setSettings(settings: GameSettings): void {
@@ -404,6 +447,25 @@ export class GameEngine {
       this.role === "watcher"
         ? this.mode === "spirit" || this.mode === "echo" || hunting || Boolean(snap?.monster)
         : Boolean(snap?.monster?.visibleToWalker) || hunting;
+
+    // Storm flicker during hunts / behind-you pressure
+    this.stormAcc += dt;
+    if (this.lightningT > 0) {
+      this.lightningT -= dt;
+      const fall = Math.max(0, this.lightningT / 0.2);
+      this.lightning.intensity = 42 * fall;
+      const boltMat = this.lightningBolt.material as THREE.MeshBasicMaterial;
+      boltMat.opacity = 0.75 * fall;
+      if (this.lightningT <= 0) {
+        this.lightning.intensity = 0;
+        this.lightningBolt.visible = false;
+      }
+    } else if (hunting && this.stormAcc > 2.8 + Math.random() * 3) {
+      this.stormAcc = 0;
+      this.strikeLightning(0.75 + Math.random() * 0.5);
+      getAudio().thunder();
+    }
+
     this.hollow.visible = showMonster && Boolean(snap?.monster);
     if (snap?.monster && this.hollow.visible) {
       this.hollow.position.set(monsterPos.x, 0, monsterPos.z);

@@ -175,6 +175,14 @@ export class AudioManager {
     this.tone(180, 0.35, "square", 0.07);
   }
 
+  thunder(): void {
+    this.noise(0.45, 0.14);
+    this.tone(48, 0.7, "sawtooth", 0.12);
+    this.tone(90, 0.35, "triangle", 0.06);
+    setTimeout(() => this.noise(0.25, 0.08), 120);
+    setTimeout(() => this.tone(36, 0.5, "sawtooth", 0.09), 180);
+  }
+
   laugh(): void {
     if (!this.ctx || !this.sfx) return;
     const t0 = this.ctx.currentTime;
