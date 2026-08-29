@@ -84,8 +84,17 @@ function startGame(code: string): void {
       emitRoom(code);
       return;
     }
-    const humansOnline = r.players.some((p) => !p.isBot && p.connected);
+    const humans = r.players.filter((p) => !p.isBot);
+    const humansOnline = humans.some((p) => p.connected);
     if (!humansOnline) return;
+    // Pause while a partner is reconnecting so WAIT actually freezes the match.
+    if (humans.length > 1 && humans.some((p) => !p.connected)) {
+      for (const p of r.players) {
+        if (!p.connected || p.isBot) continue;
+        io.to(p.socketId).emit("game:snapshot", s.snapshotFor(p.role));
+      }
+      return;
+    }
     if (!s.bothIntroDone()) {
       for (const p of r.players) {
         if (!p.connected || p.isBot) continue;
@@ -243,34 +252,36 @@ io.on("connection", (socket) => {
     if (session.bothIntroDone()) rooms.markPlaying(found.room);
   });
 
-  socket.on("player:move", (payload) => {
-    const found = rooms.getPlayer(socket.id);
+  function gameplayReady(socketId: string): { session: GameSession; role: "walker" | "watcher" } | null {
+    const found = rooms.getPlayer(socketId);
     const session = found ? sessions.get(found.room.code) : undefined;
-    if (!found || !session || !payload) return;
-    session.applyMove(found.player.role, payload);
+    if (!found || !session || found.room.phase === "lobby") return null;
+    if (!session.bothIntroDone()) return null;
+    return { session, role: found.player.role };
+  }
+
+  socket.on("player:move", (payload) => {
+    const live = gameplayReady(socket.id);
+    if (!live || !payload) return;
+    live.session.applyMove(live.role, payload);
   });
 
   socket.on("player:interact", ({ targetId }) => {
-    const found = rooms.getPlayer(socket.id);
-    const session = found ? sessions.get(found.room.code) : undefined;
-    if (!found || !session) return;
-    session.interact(found.player.role, targetId);
+    const live = gameplayReady(socket.id);
+    if (!live) return;
+    live.session.interact(live.role, targetId);
   });
 
   socket.on("player:flashlight", ({ on }) => {
-    const found = rooms.getPlayer(socket.id);
-    const session = found ? sessions.get(found.room.code) : undefined;
-    if (!found || !session) return;
-    if (found.player.role !== "walker") return;
-    session.setFlashlight(on);
+    const live = gameplayReady(socket.id);
+    if (!live || live.role !== "walker") return;
+    live.session.setFlashlight(on);
   });
 
   socket.on("player:switchMode", ({ mode }) => {
-    const found = rooms.getPlayer(socket.id);
-    const session = found ? sessions.get(found.room.code) : undefined;
-    if (!found || !session) return;
-    if (found.player.role !== "watcher") return;
-    session.switchMode(mode);
+    const live = gameplayReady(socket.id);
+    if (!live || live.role !== "watcher") return;
+    live.session.switchMode(mode);
   });
 
   socket.on("player:chat", ({ text }) => {
@@ -288,30 +299,31 @@ io.on("connection", (socket) => {
   });
 
   socket.on("player:warning", () => {
-    const found = rooms.getPlayer(socket.id);
-    const session = found ? sessions.get(found.room.code) : undefined;
-    if (!found || !session || found.player.role !== "watcher") return;
-    session.warn();
+    const live = gameplayReady(socket.id);
+    if (!live || live.role !== "watcher") return;
+    live.session.warn();
   });
 
   socket.on("player:puzzleInput", (payload) => {
-    const found = rooms.getPlayer(socket.id);
-    const session = found ? sessions.get(found.room.code) : undefined;
-    if (!found || !session || !payload?.puzzleId || !Array.isArray(payload.value)) return;
-    session.submitPuzzle(found.player.role, payload.puzzleId, payload.value.map(String));
+    const live = gameplayReady(socket.id);
+    if (!live || !payload?.puzzleId || !Array.isArray(payload.value)) return;
+    live.session.submitPuzzle(live.role, payload.puzzleId, payload.value.map(String));
   });
 
   socket.on("player:holdSignal", ({ holding }) => {
-    const found = rooms.getPlayer(socket.id);
-    const session = found ? sessions.get(found.room.code) : undefined;
-    if (!found || !session) return;
-    if (found.player.role === "watcher") {
-      session.holdSignal(holding);
+    const live = gameplayReady(socket.id);
+    if (!live) return;
+    if (live.role === "watcher") {
+      live.session.holdSignal(holding);
       return;
     }
-    if (session.solo && found.player.role === "walker") {
-      session.tuneSignal(holding);
+    if (live.session.solo && live.role === "walker") {
+      live.session.tuneSignal(holding);
     }
+  });
+
+  socket.on("player:waitReconnect", () => {
+    // Match already pauses while any human is disconnected (see game loop).
   });
 
   socket.on("disconnect", () => {
@@ -321,6 +333,11 @@ io.on("connection", (socket) => {
     if (room.phase === "lobby") {
       if (rooms.getRoom(room.code)) emitRoom(room.code);
       return;
+    }
+    const session = sessions.get(room.code);
+    if (session) {
+      session.holdSignal(false);
+      session.tuneSignal(false);
     }
     for (const p of room.players) {
       if (p.connected && !p.isBot) {

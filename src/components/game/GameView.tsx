@@ -107,6 +107,10 @@ export function GameView({
       if (e.repeat) return;
       if (e.code === "KeyR") socket.emit("player:holdSignal", { holding: true });
     };
+    const clearSignal = () => socket.emit("player:holdSignal", { holding: false });
+    const onVis = () => {
+      if (document.hidden) clearSignal();
+    };
     const onEvent = ({ type }: { type: string }) => {
       applyGameEvent(type, engine);
       if (type === "death") {
@@ -127,6 +131,8 @@ export function GameView({
     window.addEventListener("keydown", onKey);
     window.addEventListener("keydown", onKeyDownHold);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clearSignal);
+    document.addEventListener("visibilitychange", onVis);
     const onLock = () => setLooking(document.pointerLockElement === canvas);
     document.addEventListener("pointerlockchange", onLock);
     const onResize = () => {
@@ -142,10 +148,13 @@ export function GameView({
     };
     canvas.parentElement?.addEventListener("touchmove", stopScroll, { passive: false });
     return () => {
+      clearSignal();
       socket.off("game:event", onEvent);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keydown", onKeyDownHold);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clearSignal);
+      document.removeEventListener("visibilitychange", onVis);
       document.removeEventListener("pointerlockchange", onLock);
       window.removeEventListener("resize", onResize);
       document.removeEventListener("gesturestart", blockZoom);
@@ -317,7 +326,17 @@ export function GameView({
         </div>
       )}
       {disconnected && !waiting && (
-        <DisconnectOverlay role={disconnected} onWait={() => setWaiting(true)} onLobby={onLobby} />
+        <DisconnectOverlay
+          role={disconnected}
+          onWait={() => {
+            setWaiting(true);
+            socket.emit("player:waitReconnect");
+          }}
+          onLobby={onLobby}
+        />
+      )}
+      {disconnected && waiting && (
+        <div className="prompt">WAITING FOR PARTNER… MATCH PAUSED</div>
       )}
     </div>
   );

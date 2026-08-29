@@ -312,12 +312,12 @@ const CORRIDOR = buildCorridors();
 export const CORRIDOR_FLOORS = CORRIDOR.floors;
 export const WALLS = [...buildWalls(), ...CORRIDOR.walls];
 
-/** Collision for locked doors so the office and exit cannot be skipped. */
+/** Collision for closed doors (locked or slammed shut) so paths match the mesh. */
 export function doorBlockers(doors: { id: string; open: boolean; locked: boolean }[]): WallSeg[] {
   const walls: WallSeg[] = [];
   const t = WALL_THICKNESS + 0.08;
   for (const state of doors) {
-    if (!state.locked) continue;
+    if (state.open) continue;
     const def = DOORWAYS.find((d) => d.id === state.id);
     if (!def) continue;
     const c = doorwayCenter(def);

@@ -166,7 +166,7 @@ export class GameSession {
       const kind = kinds[Math.floor(Math.random() * kinds.length)]!;
       this.secretKind = kind;
       const texts = {
-        ritual: "Keep the Walker out of the ritual room.",
+        ritual: "Lead the Walker into the ritual room.",
         delay: "Do not warn them the first time something stands behind them.",
         children: "Convince the Walker to enter the children's room before the office.",
       };
@@ -347,7 +347,6 @@ export class GameSession {
     if (!this.generatorOn && (room === "generator" || room === "hallway")) {
       this.botSay(`The safe breaker is number ${this.powerSafeSwitch + 1}. Leave the others. Please.`);
     } else if (!this.puzzles.find((p) => p.id === "symbols")?.solved && (room === "security" || room === "reception")) {
-      this.eliToldSymbols = true;
       if (Math.random() < 0.22) {
         this.botSay("The lock… I have the sequence. Wait. Look at the wall yourself. I might be lying.");
       } else {
@@ -519,6 +518,14 @@ export class GameSession {
       }
       this.pushEvent("locked", "It's locked.", 0.1, "walker");
       this.showSubtitle("It's locked.");
+      return;
+    }
+    // Exit stays open once unlocked so slam/toggle cannot softlock the win.
+    if (def.isExit) {
+      if (!door.open) {
+        door.open = true;
+        this.pushEvent("door", "Door opens.", 0.15, "both");
+      }
       return;
     }
     door.open = !door.open;
@@ -767,7 +774,7 @@ export class GameSession {
     } else if (roll < 0.66) {
       this.pushEvent("whisper", "A whisper uses the Walker's voice.", 0.4, "watcher");
     } else if (roll < 0.8) {
-      const door = this.doors.find((d) => !d.locked && d.open);
+      const door = this.doors.find((d) => !d.locked && d.open && d.id !== "door-office-exit");
       if (door) {
         door.open = false;
         this.pushEvent("door-slam", "A door closes by itself.", 0.4, "both");
@@ -804,9 +811,13 @@ export class GameSession {
             : def.needsKey && this.walker.inventory.includes(def.needsKey)
               ? "[E] Unlock Door"
               : "[E] Locked Door"
-          : door.open
-            ? "[E] Close Door"
-            : "[E] Open Door";
+          : def.isExit
+            ? door.open
+              ? "[E] Exit (open)"
+              : "[E] Open Exit"
+            : door.open
+              ? "[E] Close Door"
+              : "[E] Open Door";
         best = { id: door.id, prompt, d };
       }
     }
@@ -906,7 +917,7 @@ export class GameSession {
     const o = this.objectives.find((x) => !x.done) ?? this.objectives[this.objectives.length - 1]!;
     if (!this.solo) return o;
     if (o.id === "obj-exit") {
-      return { ...o, text: "Open the exit. Hold R (Signal) at the red door panel." };
+      return { ...o, text: "Use the exit panel by the red door. Eli holds the signal." };
     }
     if (o.id === "obj-escape") {
       return { ...o, text: "Reach the exit. Eli holds the far side." };

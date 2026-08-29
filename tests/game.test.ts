@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { GameSession } from "../server/gameState/GameSession";
-import { CORRIDOR_FLOORS, getRoomAt, getRoomById, MAP_ROOMS, steerToward } from "../shared/map";
+import {
+  CORRIDOR_FLOORS,
+  DOORWAYS,
+  WALLS,
+  doorBlockers,
+  doorwayCenter,
+  getRoomAt,
+  getRoomById,
+  MAP_ROOMS,
+  resolveMove,
+  steerToward,
+} from "../shared/map";
 import { tickMonster } from "../server/gameState/monster";
 
 describe("GameSession", () => {
@@ -213,6 +224,68 @@ describe("GameSession", () => {
     const p = steerToward(ritual.cx, ritual.cz, entrance.cx, entrance.cz);
     expect(getRoomAt(p.x, p.z)?.id).toBeTruthy();
     expect(p.x).not.toBe(entrance.cx);
+  });
+
+  it("does not leak the keypad when Eli claims to be lying", () => {
+    let lied = false;
+    for (let i = 0; i < 120 && !lied; i++) {
+      const s = new GameSession(true);
+      s.walker.position = { x: getRoomById("security")!.cx, y: 1.6, z: getRoomById("security")!.cz };
+      (s as unknown as { signalCooldown: number }).signalCooldown = 0;
+      s.tuneSignal(true);
+      s.tuneSignal(false);
+      const chats = s.drainChats();
+      if (chats.some((c) => c.text.includes("lying"))) {
+        lied = true;
+        expect((s as unknown as { eliToldSymbols: boolean }).eliToldSymbols).toBe(false);
+        expect(s.snapshotFor("walker").symbolSolution).toBeNull();
+      }
+    }
+    expect(lied).toBe(true);
+  });
+
+  it("keeps the exit open once unlocked and still wins", () => {
+    const session = new GameSession();
+    const exitDoor = session.doors.find((d) => d.id === "door-office-exit")!;
+    exitDoor.locked = false;
+    exitDoor.open = true;
+    const c = doorwayCenter(DOORWAYS.find((d) => d.id === "door-office-exit")!);
+    session.walker.position = { x: c!.x, y: 1.6, z: c!.z };
+    session.interact("walker", "door-office-exit");
+    expect(exitDoor.open).toBe(true);
+    const exit = getRoomById("exit")!;
+    session.walker.position = { x: exit.cx, y: 1.6, z: exit.cz };
+    session.watcher.position = { x: exit.cx, y: 2.4, z: exit.cz };
+    session.tick(0.1);
+    expect(session.ended).not.toBeNull();
+  });
+
+  it("blocks walking through a closed unlocked office door", () => {
+    const session = new GameSession(true);
+    const officeDoor = session.doors.find((d) => d.id === "door-hallway-office")!;
+    officeDoor.locked = false;
+    officeDoor.open = false;
+    const walls = [...WALLS, ...doorBlockers(session.doors)];
+    const hall = getRoomById("hallway")!;
+    let x = hall.cx + hall.hw - 0.6;
+    let z = hall.cz;
+    for (let i = 0; i < 40; i++) {
+      const next = resolveMove(x, z, 0.4, 0, 0.35, walls);
+      x = next.x;
+      z = next.z;
+    }
+    expect(getRoomAt(x, z)?.id).not.toBe("office");
+    expect(x).toBeLessThan(getRoomById("office")!.cx - getRoomById("office")!.hw);
+  });
+
+  it("solo exit objective does not tell the Walker to Hold R", () => {
+    const session = new GameSession(true);
+    for (const o of session.objectives) {
+      if (o.id !== "obj-exit" && o.id !== "obj-escape") o.done = true;
+    }
+    const text = session.snapshotFor("walker").objective.text;
+    expect(text.toLowerCase()).not.toContain("hold r");
+    expect(text.toLowerCase()).toMatch(/panel|eli/);
   });
 
   it("keeps a hunting Hollow inside rooms while closing", () => {

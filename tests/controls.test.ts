@@ -75,4 +75,12 @@ describe("WalkerController", () => {
     const { sprinting } = c.step(0.2, "walker", 100);
     expect(sprinting).toBe(false);
   });
+
+  it("consume removes KeyE so a held key does not re-fire without a new press", () => {
+    const c = new WalkerController();
+    c.keys.add("KeyE");
+    expect(c.consume("KeyE")).toBe(true);
+    expect(c.consume("KeyE")).toBe(false);
+    expect(c.keys.has("KeyE")).toBe(false);
+  });
 });

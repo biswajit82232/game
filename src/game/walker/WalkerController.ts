@@ -34,6 +34,8 @@ export class WalkerController {
     const down = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      // Key-repeat would re-arm E/F every frame after consume() deletes them.
+      if (e.repeat && (e.code === "KeyE" || e.code === "KeyF")) return;
       this.keys.add(e.code);
       if (
         ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(
