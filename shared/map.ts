@@ -24,17 +24,17 @@ export const DOOR_HEIGHT = 2.35;
 export const WALL_THICKNESS = 0.28;
 
 export const MAP_ROOMS: RoomBox[] = [
-  { id: "entrance", name: "Entrance", cx: 0, cz: 0, hw: 4.5, hd: 4 },
-  { id: "reception", name: "Reception", cx: 12, cz: 0, hw: 6, hd: 5.5 },
-  { id: "hallway", name: "Hallway", cx: 26, cz: 0, hw: 8, hd: 2.2 },
-  { id: "security", name: "Security Room", cx: 12, cz: 12, hw: 4.5, hd: 4.5 },
-  { id: "generator", name: "Generator Room", cx: 26, cz: 12, hw: 4.5, hd: 4.5 },
-  { id: "office", name: "Locked Office", cx: 40, cz: 0, hw: 5.5, hd: 4.5 },
-  { id: "exit", name: "Exit", cx: 52, cz: 0, hw: 4.2, hd: 4.2 },
-  { id: "storage", name: "Storage Room", cx: 12, cz: -12, hw: 4.5, hd: 4.5 },
-  { id: "children", name: "Children's Room", cx: 26, cz: -12, hw: 4.5, hd: 4.5 },
-  { id: "basement", name: "Basement", cx: 12, cz: -24, hw: 5.5, hd: 4.5 },
-  { id: "ritual", name: "Ritual Room", cx: 40, cz: 12, hw: 5, hd: 4.5 },
+  { id: "entrance", name: "Entrance", cx: 0, cz: 0, hw: 3.6, hd: 3.4 },
+  { id: "reception", name: "Reception", cx: 10, cz: 0, hw: 6.4, hd: 5.5 },
+  { id: "hallway", name: "Hallway", cx: 24.6, cz: 0, hw: 8.2, hd: 1.85 },
+  { id: "security", name: "Security Room", cx: 10, cz: 10.1, hw: 4.5, hd: 4.6 },
+  { id: "generator", name: "Generator Room", cx: 21, cz: 6.25, hw: 4.2, hd: 4.4 },
+  { id: "office", name: "Locked Office", cx: 38.2, cz: 0, hw: 5.4, hd: 4.6 },
+  { id: "exit", name: "Exit", cx: 47.6, cz: 0, hw: 4.0, hd: 3.6 },
+  { id: "storage", name: "Storage Room", cx: 10, cz: -9.9, hw: 4.5, hd: 4.4 },
+  { id: "children", name: "Children's Room", cx: 24.6, cz: -6.15, hw: 4.5, hd: 4.3 },
+  { id: "basement", name: "Basement", cx: 10, cz: -18.9, hw: 5.0, hd: 4.6 },
+  { id: "ritual", name: "Ritual Room", cx: 29.0, cz: 6.25, hw: 3.8, hd: 4.4 },
 ];
 
 export const DOORWAYS: DoorwayDef[] = [
@@ -200,6 +200,26 @@ function gapOnEdge(
   return gaps;
 }
 
+/** West/south faces that sit on a shared room edge — the other room already owns that wall. */
+function ownedByNeighbor(room: RoomBox, side: "w" | "s"): { start: number; end: number }[] {
+  const gaps: { start: number; end: number }[] = [];
+  for (const other of MAP_ROOMS) {
+    if (other.id === room.id) continue;
+    if (side === "w") {
+      if (Math.abs(other.cx + other.hw - (room.cx - room.hw)) > 0.12) continue;
+      const start = Math.max(room.cz - room.hd, other.cz - other.hd);
+      const end = Math.min(room.cz + room.hd, other.cz + other.hd);
+      if (end - start > 0.05) gaps.push({ start, end });
+    } else {
+      if (Math.abs(other.cz + other.hd - (room.cz - room.hd)) > 0.12) continue;
+      const start = Math.max(room.cx - room.hw, other.cx - other.hw);
+      const end = Math.min(room.cx + room.hw, other.cx + other.hw);
+      if (end - start > 0.05) gaps.push({ start, end });
+    }
+  }
+  return gaps;
+}
+
 function splitEdge(
   start: number,
   end: number,
@@ -233,13 +253,13 @@ export function buildWalls(): WallSeg[] {
     for (const s of splitEdge(z0, z1, gapOnEdge(room, "e"))) {
       addWall(walls, x1 - t / 2, x1 + t / 2, s.start, s.end);
     }
-    for (const s of splitEdge(z0, z1, gapOnEdge(room, "w"))) {
+    for (const s of splitEdge(z0, z1, [...gapOnEdge(room, "w"), ...ownedByNeighbor(room, "w")])) {
       addWall(walls, x0 - t / 2, x0 + t / 2, s.start, s.end);
     }
     for (const s of splitEdge(x0, x1, gapOnEdge(room, "n"))) {
       addWall(walls, s.start, s.end, z1 - t / 2, z1 + t / 2);
     }
-    for (const s of splitEdge(x0, x1, gapOnEdge(room, "s"))) {
+    for (const s of splitEdge(x0, x1, [...gapOnEdge(room, "s"), ...ownedByNeighbor(room, "s")])) {
       addWall(walls, s.start, s.end, z0 - t / 2, z0 + t / 2);
     }
   }

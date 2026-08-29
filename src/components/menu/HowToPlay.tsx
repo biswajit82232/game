@@ -27,8 +27,9 @@ export function HowToPlay({ onBack }: { onBack: () => void }) {
             <strong>Watcher:</strong> WASD fly · 1–4 frequencies · Q warn · hold SIGNAL at the exit
           </li>
           <li>
-            Layout: Entrance east into Reception. Security north. Storage then Basement south. Hallway further east.
-            Generator north of the hallway. Locked office further east. Exit beyond that.
+            Layout: Vestibule into the reception lobby, then a long corridor east. Security north of the lobby. Storage
+            and basement south. Generator and a sealed chamber north of the corridor. Locked office and exit at the far
+            east end.
           </li>
           <li>If something stands behind you: do not turn around unless you trust the warning.</li>
           <li>When it hunts, you will see it. Run. Do not stare.</li>

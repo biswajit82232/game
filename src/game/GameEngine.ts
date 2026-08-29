@@ -58,8 +58,8 @@ export class GameEngine {
   private dpr: number;
   private slowFrames = 0;
   private hidden = false;
-  private fogWalker = new THREE.FogExp2(0x141820, 0.012);
-  private fogWatcher = new THREE.FogExp2(0x0c1812, 0.017);
+  private fogWalker = new THREE.FogExp2(0x10141c, 0.011);
+  private fogWatcher = new THREE.FogExp2(0x0a1210, 0.015);
   private placed = false;
   private jumpscareT = 0;
   private baseFov: number;
@@ -85,27 +85,27 @@ export class GameEngine {
     this.renderer.setPixelRatio(this.dpr);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = role === "watcher" ? 1.08 : 1.22;
+    this.renderer.toneMappingExposure = role === "watcher" ? 1.0 : 1.05;
     this.renderer.shadowMap.enabled = false;
     const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(role === "watcher" ? 0x0c1812 : 0x141820);
+    this.scene.background = new THREE.Color(role === "watcher" ? 0x0a1210 : 0x0e1016);
     this.scene.fog = role === "watcher" ? this.fogWatcher : this.fogWalker;
 
-    this.baseFov = gfx.mobile ? 70 : 72;
+    this.baseFov = gfx.mobile ? 68 : 70;
     this.camera = new THREE.PerspectiveCamera(
       this.baseFov,
       (canvas.clientWidth || window.innerWidth) / (canvas.clientHeight || window.innerHeight),
-      0.08,
+      0.06,
       gfx.far,
     );
 
-    this.ambient = new THREE.AmbientLight(0x7a828c, role === "watcher" ? 0.55 : 0.42);
-    this.hemi = new THREE.HemisphereLight(0xc8d2e0, 0x2a241c, role === "watcher" ? 0.7 : 0.55);
+    this.ambient = new THREE.AmbientLight(0x4a5058, role === "watcher" ? 0.38 : 0.18);
+    this.hemi = new THREE.HemisphereLight(0xc8d0dc, 0x1e1a14, role === "watcher" ? 0.48 : 0.32);
     this.scene.add(this.ambient, this.hemi);
-    this.fill = new THREE.DirectionalLight(0xf0e6d2, 0.28);
-    this.fill.position.set(6, 14, 4);
+    this.fill = new THREE.DirectionalLight(0xe8dcc8, 0.1);
+    this.fill.position.set(4, 16, 2);
     this.scene.add(this.fill);
 
     this.world = buildWorld(settings.graphics, Math.min(gfx.anisotropy, maxAniso));
@@ -125,28 +125,35 @@ export class GameEngine {
     this.echoHollow.visible = false;
     this.scene.add(this.echoHollow);
 
-    this.flashlight = new THREE.SpotLight(0xffe6c4, gfx.mobile ? 95 : 110, 26, Math.PI / 5.4, 0.38, 1.55);
+    this.flashlight = new THREE.SpotLight(
+      0xffe2b8,
+      gfx.mobile ? 140 : 175,
+      22,
+      Math.PI / 6.2,
+      0.55,
+      1.75,
+    );
     this.flashlight.visible = role === "walker";
     this.flashlight.castShadow = false;
-    this.flashlight.position.set(0.16, -0.1, 0.18);
+    this.flashlight.position.set(0.14, -0.08, 0.12);
     this.camera.add(this.flashlight);
-    this.flashlight.target.position.set(0, 0, -7);
+    this.flashlight.target.position.set(0, -0.05, -8);
     this.camera.add(this.flashlight.target);
-    this.flashFill = new THREE.PointLight(0xffe2b8, gfx.mobile ? 18 : 22, 7.5, 1.9);
-    this.flashFill.position.set(0, -0.04, 0.3);
+    this.flashFill = new THREE.PointLight(0xffd9a8, gfx.mobile ? 12 : 16, 5.5, 2.1);
+    this.flashFill.position.set(0.05, -0.02, 0.25);
     this.camera.add(this.flashFill);
     this.flashCone = new THREE.Mesh(
-      new THREE.ConeGeometry(1.15, 7.2, gfx.mobile ? 12 : 20, 1, true),
+      new THREE.ConeGeometry(0.95, 6.5, gfx.mobile ? 14 : 24, 1, true),
       new THREE.MeshBasicMaterial({
         color: 0xffe6c8,
         transparent: true,
-        opacity: gfx.mobile ? 0.028 : 0.04,
+        opacity: gfx.mobile ? 0.022 : 0.035,
         depthWrite: false,
         side: THREE.DoubleSide,
       }),
     );
     this.flashCone.rotation.x = Math.PI / 2;
-    this.flashCone.position.set(0, -0.08, -3.5);
+    this.flashCone.position.set(0, -0.06, -3.2);
     this.flashCone.visible = role === "walker";
     this.camera.add(this.flashCone);
     this.scene.add(this.camera);
@@ -344,15 +351,15 @@ export class GameEngine {
     }
     const battery = snap?.walker.battery ?? 100;
     const beam = flashlightOn && battery > 0 ? this.flicker : 0;
-    this.flashlight.intensity = beam ? 108 * beam : 0;
-    this.flashFill.intensity = beam ? 20 * beam : 0;
+    this.flashlight.intensity = beam ? 155 * beam : 0;
+    this.flashFill.intensity = beam ? 14 * beam : 0;
     this.flashCone.visible = beam > 0;
-    this.ambient.intensity = this.role === "watcher" ? 0.52 : flashlightOn && battery > 8 ? 0.4 : 0.22;
-    this.hemi.intensity = this.role === "watcher" ? 0.68 : flashlightOn && battery > 8 ? 0.52 : 0.32;
+    this.ambient.intensity = this.role === "watcher" ? 0.38 : flashlightOn && battery > 8 ? 0.16 : 0.08;
+    this.hemi.intensity = this.role === "watcher" ? 0.48 : flashlightOn && battery > 8 ? 0.3 : 0.16;
     this.flashlight.target.updateMatrixWorld();
 
     if (this.role === "walker") {
-      this.renderer.toneMappingExposure = 1.18;
+      this.renderer.toneMappingExposure = 1.05;
       this.scene.fog = this.fogWalker;
     } else {
       if (this.mode === "spirit") {

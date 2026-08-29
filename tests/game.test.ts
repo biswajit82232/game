@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GameSession } from "../server/gameState/GameSession";
-import { getRoomAt, getRoomById, MAP_ROOMS, steerToward } from "../shared/map";
+import { CORRIDOR_FLOORS, getRoomAt, getRoomById, MAP_ROOMS, steerToward } from "../shared/map";
 import { tickMonster } from "../server/gameState/monster";
 
 describe("GameSession", () => {
@@ -34,11 +34,40 @@ describe("GameSession", () => {
     const door = session.doors.find((d) => d.id === "door-office-exit")!;
     door.open = true;
     door.locked = false;
-    session.walker.position = { x: 52, y: 1.6, z: 0 };
-    session.watcher.position = { x: 52, y: 2.4, z: 0 };
+    const exit = getRoomById("exit")!;
+    session.walker.position = { x: exit.cx, y: 1.6, z: exit.cz };
+    session.watcher.position = { x: exit.cx, y: 2.4, z: exit.cz };
     session.tick(0.1);
     expect(session.ended).not.toBeNull();
     expect(["escape", "betrayal", "hollow", "loop"]).toContain(session.ended?.ending);
+  });
+
+  it("builds Site 07 as one connected building, not floating rooms", () => {
+    const share = (a: string, b: string, axis: "x" | "z") => {
+      const ra = getRoomById(a)!;
+      const rb = getRoomById(b)!;
+      if (axis === "x") expect(ra.cx + ra.hw).toBeCloseTo(rb.cx - rb.hw, 5);
+      else expect(ra.cz + ra.hd).toBeCloseTo(rb.cz - rb.hd, 5);
+    };
+    share("entrance", "reception", "x");
+    share("reception", "hallway", "x");
+    share("hallway", "office", "x");
+    share("office", "exit", "x");
+    share("reception", "security", "z");
+    share("storage", "reception", "z");
+    share("basement", "storage", "z");
+    share("hallway", "generator", "z");
+    share("children", "hallway", "z");
+    share("generator", "ritual", "x");
+    share("ritual", "office", "x");
+    expect(CORRIDOR_FLOORS).toHaveLength(0);
+  });
+
+  it("spawns interactables inside their rooms", () => {
+    const session = new GameSession();
+    for (const item of session.items) {
+      expect(getRoomAt(item.position.x, item.position.z)?.id).toBe(item.roomId);
+    }
   });
 
   it("solo mode includes watcher puzzle assist for the walker", () => {
@@ -98,7 +127,7 @@ describe("GameSession", () => {
     session.tick(0.2);
     expect(session.watcher.holdingSignal).toBe(false);
     expect(session.watcher.position.x).toBe(session.walker.position.x);
-    session.walker.position = { x: 40, y: 1.6, z: 0 };
+    session.walker.position = { x: getRoomById("office")!.cx, y: 1.6, z: 0 };
     session.tick(0.2);
     expect(session.watcher.holdingSignal).toBe(true);
   });

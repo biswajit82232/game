@@ -174,120 +174,38 @@ export class GameSession {
 
   private spawnItems(): ItemState[] {
     const keyRoom = KEY_SPAWN_ROOMS[Math.floor(Math.random() * KEY_SPAWN_ROOMS.length)]!;
-    const kr = getRoomById(keyRoom)!;
+    const at = (
+      roomId: string,
+      dx: number,
+      y: number,
+      dz: number,
+      extra: Omit<ItemState, "position" | "roomId" | "taken">,
+    ): ItemState => {
+      const r = getRoomById(roomId)!;
+      return {
+        ...extra,
+        position: { x: r.cx + dx, y, z: r.cz + dz },
+        taken: false,
+        roomId,
+      };
+    };
     const items: ItemState[] = [
-      {
-        id: "office-key",
-        type: "key",
-        position: { x: kr.cx + 1.2, y: 0.9, z: kr.cz - 0.8 },
-        taken: false,
-        roomId: keyRoom,
-      },
-      {
-        id: "battery-0",
-        type: "battery",
-        position: { x: 2.2, y: 0.4, z: -1.4 },
-        taken: false,
-        roomId: "entrance",
-      },
-      {
-        id: "battery-1",
-        type: "battery",
-        position: { x: 12.8, y: 0.4, z: 2.1 },
-        taken: false,
-        roomId: "reception",
-      },
-      {
-        id: "battery-2",
-        type: "battery",
-        position: { x: 26.4, y: 0.4, z: 12.8 },
-        taken: false,
-        roomId: "generator",
-      },
-      {
-        id: "note-01",
-        type: "note",
-        position: { x: 10.2, y: 1.05, z: 1.6 },
-        taken: false,
-        roomId: "reception",
-      },
-      {
-        id: "note-02",
-        type: "note",
-        position: { x: 12.4, y: 1.05, z: 12.6 },
-        taken: false,
-        roomId: "security",
-      },
-      {
-        id: "note-03",
-        type: "note",
-        position: { x: 10.5, y: 1.05, z: -24.2 },
-        taken: false,
-        roomId: "basement",
-      },
-      {
-        id: "note-04",
-        type: "note",
-        position: { x: 40.8, y: 1.05, z: 1.4 },
-        taken: false,
-        roomId: "office",
-      },
-      {
-        id: "note-05",
-        type: "note",
-        position: { x: 24.6, y: 1.05, z: 13.4 },
-        taken: false,
-        roomId: "generator",
-      },
-      {
-        id: "keypad-security",
-        type: "keypad",
-        position: { x: 14.6, y: 1.4, z: 12 },
-        taken: false,
-        roomId: "security",
-      },
-      {
-        id: "switch-0",
-        type: "switch",
-        position: { x: 23.4, y: 1.4, z: 13.6 },
-        taken: false,
-        roomId: "generator",
-      },
-      {
-        id: "switch-1",
-        type: "switch",
-        position: { x: 26, y: 1.4, z: 13.8 },
-        taken: false,
-        roomId: "generator",
-      },
-      {
-        id: "switch-2",
-        type: "switch",
-        position: { x: 28.6, y: 1.4, z: 13.6 },
-        taken: false,
-        roomId: "generator",
-      },
-      {
-        id: "generator",
-        type: "generator",
-        position: { x: 26, y: 0.8, z: 10.2 },
-        taken: false,
-        roomId: "generator",
-      },
-      {
-        id: "exit-panel",
-        type: "exit",
-        position: { x: 43.6, y: 1.3, z: 0 },
-        taken: false,
-        roomId: "office",
-      },
-      {
-        id: "audio-log-1",
-        type: "audio-log",
-        position: { x: 13.6, y: 1.0, z: -23.2 },
-        taken: false,
-        roomId: "basement",
-      },
+      at(keyRoom, 1.2, 0.9, -0.8, { id: "office-key", type: "key" }),
+      at("entrance", 2.1, 0.4, -1.3, { id: "battery-0", type: "battery" }),
+      at("reception", 2.6, 0.4, 2.0, { id: "battery-1", type: "battery" }),
+      at("generator", 1.4, 0.4, 1.6, { id: "battery-2", type: "battery" }),
+      at("reception", -1.8, 1.05, 1.4, { id: "note-01", type: "note" }),
+      at("security", -1.2, 1.05, 1.8, { id: "note-02", type: "note" }),
+      at("basement", -1.6, 1.05, 1.4, { id: "note-03", type: "note" }),
+      at("office", 1.6, 1.05, 1.2, { id: "note-04", type: "note" }),
+      at("generator", -1.2, 1.05, 2.0, { id: "note-05", type: "note" }),
+      at("security", 2.4, 1.4, 4.2, { id: "keypad-security", type: "keypad" }),
+      at("generator", -2.0, 1.4, 3.6, { id: "switch-0", type: "switch" }),
+      at("generator", 0, 1.4, 3.7, { id: "switch-1", type: "switch" }),
+      at("generator", 2.0, 1.4, 3.6, { id: "switch-2", type: "switch" }),
+      at("generator", 0, 0.8, -2.4, { id: "generator", type: "generator" }),
+      at("office", 4.6, 1.3, 0, { id: "exit-panel", type: "exit" }),
+      at("basement", 2.4, 1.0, 1.8, { id: "audio-log-1", type: "audio-log" }),
     ];
     return items;
   }
