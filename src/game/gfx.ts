@@ -19,11 +19,11 @@ export function gfxProfile(settings: GameSettings, mobile = isTouchPreferred()):
     high,
     mobile,
     antialias: high && !mobile,
-    dprCap: high ? (mobile ? 1.55 : 1.9) : mobile ? 1.15 : 1.3,
-    texSize: high ? (mobile ? 384 : 768) : 160,
-    texNoise: high ? (mobile ? 420 : 900) : 140,
-    extraProps: high,
-    far: high ? (mobile ? 48 : 68) : 38,
-    anisotropy: high ? (mobile ? 4 : 8) : 2,
+    dprCap: high ? (mobile ? 1.4 : 1.75) : mobile ? 1.1 : 1.25,
+    texSize: high ? (mobile ? 320 : 512) : 160,
+    texNoise: high ? (mobile ? 360 : 720) : 140,
+    extraProps: high && !mobile,
+    far: high ? (mobile ? 42 : 62) : 36,
+    anisotropy: high ? (mobile ? 2 : 8) : 2,
   };
 }

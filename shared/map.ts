@@ -391,6 +391,14 @@ export const NOTES: Record<string, { title: string; body: string }> = {
     title: "GENERATOR FAILSAFE",
     body: "Three breakers. One is isolated. DANGER frequency paints the true breaker gold and the traps red. The other two wake it.",
   },
+  "note-06": {
+    title: "RITUAL THRESHOLD",
+    body: "Do not enter the room past the generator if you can walk around it. Red marks there are not paint. The Watcher who leads you in is not your friend.",
+  },
+  "note-07": {
+    title: "CHILDREN'S WARD — CLOSED",
+    body: "Beds still warm. No patients on the roster since 1989. If someone asks you to check on the children first, ask why they already know the layout.",
+  },
 };
 
 export const OBJECTIVES = [

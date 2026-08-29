@@ -1,3 +1,5 @@
+import { isTouchPreferred } from "../utils/touch";
+
 export type GraphicsQuality = "low" | "high";
 
 export interface GameSettings {
@@ -41,13 +43,23 @@ export function loadSettings(): GameSettings {
     const raw = localStorage.getItem(KEY);
     if (!raw) {
       const graphics = defaultGraphics();
-      return { ...DEFAULT_SETTINGS, graphics, grain: graphics === "high" };
+      const touch = typeof window !== "undefined" && isTouchPreferred();
+      return {
+        ...DEFAULT_SETTINGS,
+        graphics,
+        grain: graphics === "high" && !touch,
+      };
     }
     const merged = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } as GameSettings;
     if (!localStorage.getItem("dta-gfx-v3") && merged.graphics === "low") {
       merged.graphics = "high";
-      merged.grain = true;
+      merged.grain = typeof window !== "undefined" && !isTouchPreferred();
       localStorage.setItem("dta-gfx-v3", "1");
+      saveSettings(merged);
+    }
+    if (!localStorage.getItem("dta-perf-v1")) {
+      if (typeof window !== "undefined" && isTouchPreferred()) merged.grain = false;
+      localStorage.setItem("dta-perf-v1", "1");
       saveSettings(merged);
     }
     return merged;

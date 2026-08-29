@@ -37,6 +37,12 @@ export function WalkerHUD({
           </div>
         )}
         <p className="muted hud-hint">SIGNAL: {snap.signalQuality}</p>
+        {snap.walker.inventory.includes("office-key") && (
+          <p className="muted hud-hint">KEY: OFFICE</p>
+        )}
+        {snap.walker.health < 100 && (
+          <p className="muted hud-hint">HEALTH: {Math.max(0, Math.round(snap.walker.health))}%</p>
+        )}
       </div>
       {!touch && (
         <>

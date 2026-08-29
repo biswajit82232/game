@@ -48,6 +48,7 @@ export function App() {
   const [starting, setStarting] = useState(false);
   const [menuError, setMenuError] = useState<string | null>(null);
   const [settingsFrom, setSettingsFrom] = useState<Screen>("menu");
+  const [lastSolo, setLastSolo] = useState(false);
   const socketId = useRef("");
   const screenRef = useRef<Screen>(screen);
   const playRef = useRef<LastPlay>(readLastPlay() ?? { code: "", role: null });
@@ -117,6 +118,7 @@ export function App() {
     socket.on("room:updated", (next) => {
       setRoom(next);
       setJoinError(null);
+      setLastSolo(Boolean(next.solo));
       rememberPlay({ code: next.code });
       if (next.phase === "lobby") setScreen("lobby");
     });
@@ -144,7 +146,10 @@ export function App() {
       setScreen((s) => (s === "game" || s === "results" ? s : "intro"));
       void audio.resume();
     });
-    socket.on("game:snapshot", (snap) => setSnapshot(snap));
+    socket.on("game:snapshot", (snap) => {
+      setSnapshot(snap);
+      if (snap.solo) setLastSolo(true);
+    });
     socket.on("game:event", ({ type, message }) => {
       if (type === "fake-message") {
         setMessages((m) => [
@@ -200,6 +205,34 @@ export function App() {
     window.clearTimeout(endTimerRef.current);
     getSocket().emit("room:leave");
     resetPlay();
+    setScreen("menu");
+  };
+
+  const playAgain = () => {
+    window.clearTimeout(endTimerRef.current);
+    getSocket().emit("room:leave");
+    resetPlay();
+    if (lastSolo) {
+      setScreen("menu");
+      setStarting(true);
+      setMenuError(null);
+      void getAudio(settings).resume();
+      void waitUntilConnected(18000).then((ok) => {
+        if (!ok) {
+          setStarting(false);
+          setMenuError("Could not reach the server. Wait a few seconds and try again.");
+          return;
+        }
+        getSocket().emit("room:solo");
+        window.setTimeout(() => {
+          if (screenRef.current === "menu") {
+            setStarting(false);
+            setMenuError("The match did not start. Try PLAY SOLO again.");
+          }
+        }, 12000);
+      });
+      return;
+    }
     setScreen("menu");
   };
 
@@ -349,7 +382,7 @@ export function App() {
     return (
       <ResultsScreen
         end={end}
-        onAgain={leave}
+        onAgain={playAgain}
         onLobby={leave}
       />
     );

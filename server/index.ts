@@ -292,11 +292,6 @@ io.on("connection", (socket) => {
     const session = found ? sessions.get(found.room.code) : undefined;
     if (!found || !session || found.player.role !== "watcher") return;
     session.warn();
-    for (const p of found.room.players) {
-      if (p.connected && !p.isBot) {
-        io.to(p.socketId).emit("game:chat", { from: "watcher", text: "DO NOT TURN AROUND." });
-      }
-    }
   });
 
   socket.on("player:puzzleInput", (payload) => {

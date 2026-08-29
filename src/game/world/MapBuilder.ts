@@ -276,14 +276,18 @@ function addRoomLights(
   if (high && room.id === "hallway") {
     group.add(makeFluorescent(room.cx - 4.8, room.cz, 0));
     group.add(makeFluorescent(room.cx + 4.8, room.cz, 0));
-    const mid = new THREE.PointLight(0xe8eef2, 12, 10, decay);
-    mid.position.set(room.cx - 4.5, 2.5, room.cz);
-    group.add(mid);
+    if (!mobile) {
+      const mid = new THREE.PointLight(0xe8eef2, 12, 10, decay);
+      mid.position.set(room.cx - 4.5, 2.5, room.cz);
+      group.add(mid);
+    }
   }
-  // dim fill so corners aren't pure black (still dark horror)
-  const fill = new THREE.PointLight(color, high ? 3.5 : 2.2, high ? 10 : 8, 2.4);
-  fill.position.set(room.cx, 1.4, room.cz);
-  group.add(fill);
+  // dim fill so corners aren't pure black (still dark horror) — skip on phones
+  if (!mobile) {
+    const fill = new THREE.PointLight(color, high ? 3.5 : 2.2, high ? 10 : 8, 2.4);
+    fill.position.set(room.cx, 1.4, room.cz);
+    group.add(fill);
+  }
 }
 
 function createItemMesh(item: ItemState): THREE.Object3D {

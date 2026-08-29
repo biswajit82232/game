@@ -29,7 +29,7 @@ export function WatcherHUD({
       <div className="hud-tl">
         <div className="bar-label">OBJECTIVE</div>
         <div>{snap.objective.text}</div>
-        {snap.secretObjective && !touch && <p className="secret">SECRET: {snap.secretObjective}</p>}
+        {snap.secretObjective && <p className="secret">SECRET: {snap.secretObjective}</p>}
         {touch && (
           <div className="hud-mini-bars">
             <div>

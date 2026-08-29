@@ -46,6 +46,7 @@ export function GameView({
   const [looking, setLooking] = useState(false);
   const gyroRef = useRef<((ev: DeviceOrientationEvent) => void) | null>(null);
   const [foundScare, setFoundScare] = useState(false);
+  const dismissedOverlay = useRef<string | null>(null);
   const chase =
     !foundScare && (snapshot?.monster?.ai === "hunting" || snapshot?.monster?.ai === "attack");
 
@@ -77,11 +78,26 @@ export function GameView({
         document.exitPointerLock();
       }
       if (role === "watcher") {
-        if (e.code === "Digit1") socket.emit("player:switchMode", { mode: "normal" });
-        if (e.code === "Digit2") socket.emit("player:switchMode", { mode: "spirit" });
-        if (e.code === "Digit3") socket.emit("player:switchMode", { mode: "echo" });
-        if (e.code === "Digit4") socket.emit("player:switchMode", { mode: "danger" });
-        if (e.code === "KeyQ") socket.emit("player:warning");
+        if (e.code === "Digit1") {
+          getAudio().modeSwitch();
+          socket.emit("player:switchMode", { mode: "normal" });
+        }
+        if (e.code === "Digit2") {
+          getAudio().modeSwitch();
+          socket.emit("player:switchMode", { mode: "spirit" });
+        }
+        if (e.code === "Digit3") {
+          getAudio().modeSwitch();
+          socket.emit("player:switchMode", { mode: "echo" });
+        }
+        if (e.code === "Digit4") {
+          getAudio().modeSwitch();
+          socket.emit("player:switchMode", { mode: "danger" });
+        }
+        if (e.code === "KeyQ") {
+          getAudio().radio();
+          socket.emit("player:warning");
+        }
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -142,7 +158,11 @@ export function GameView({
 
   useEffect(() => {
     if (snapshot) engineRef.current?.applySnapshot(snapshot);
-    if (snapshot?.overlay) setNote(snapshot.overlay);
+    if (snapshot?.overlay) {
+      if (dismissedOverlay.current !== snapshot.overlay) setNote(snapshot.overlay);
+    } else {
+      dismissedOverlay.current = null;
+    }
   }, [snapshot]);
 
   useEffect(() => {
@@ -179,8 +199,14 @@ export function GameView({
         <WatcherHUD
           snap={snapshot}
           touch={touch}
-          onMode={(mode: WatcherMode) => socket.emit("player:switchMode", { mode })}
-          onWarn={() => socket.emit("player:warning")}
+          onMode={(mode: WatcherMode) => {
+            getAudio().modeSwitch();
+            socket.emit("player:switchMode", { mode });
+          }}
+          onWarn={() => {
+            getAudio().radio();
+            socket.emit("player:warning");
+          }}
           onHold={(holding) => socket.emit("player:holdSignal", { holding })}
         />
       )}
@@ -258,11 +284,19 @@ export function GameView({
         />
       )}
       {note && (
-        <div className="overlay-card" onClick={() => setNote(null)}>
+        <div
+          className="overlay-card"
+          onClick={() => {
+            dismissedOverlay.current = note;
+            setNote(null);
+            getAudio().ui();
+          }}
+        >
           <div className="panel">
             <pre className="muted" style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>
               {note}
             </pre>
+            <p className="muted hud-hint">TAP / CLICK TO CLOSE</p>
           </div>
         </div>
       )}
@@ -295,9 +329,10 @@ export function applyGameEvent(
   audio = getAudio(),
 ): void {
   if (!engine) return;
-  if (type === "warning" || type === "behind") {
+  if (type === "warning" || type === "behind" || type === "false-warning") {
     engine.effects.trigger("heartbeat", 2.2, 1);
     audio.radio();
+    audio.heartbeat();
     if (type === "behind") {
       engine.effects.trigger("shake", 0.5, 1);
       audio.scare();
@@ -308,7 +343,7 @@ export function applyGameEvent(
     engine.effects.trigger("heartbeat", 2.4, 1);
     audio.jumpscare();
     haptic(0, [30, 20, 80]);
-  } else if (type === "silhouette-flash") {
+  } else if (type === "silhouette-flash" || type === "shadow-cross" || type === "coat-scare") {
     engine.effects.trigger("shake", 0.5, 1);
     engine.effects.trigger("heartbeat", 2, 1);
     audio.scare();
@@ -319,7 +354,7 @@ export function applyGameEvent(
     audio.scream();
     audio.scare();
     haptic(0, [18, 40, 18, 40, 30]);
-  } else if (type === "watcher-distort" || type === "static") {
+  } else if (type === "watcher-distort" || type === "static" || type === "lights-out") {
     engine.effects.trigger("static", 1.5, 1);
     audio.noise(0.4, 0.06);
   } else if (type === "door-slam" || type === "door") {
@@ -327,5 +362,32 @@ export function applyGameEvent(
     audio.door();
   } else if (type === "child-laugh" || type === "whisper") {
     audio.whisper();
+    if (type === "child-laugh") audio.laugh();
+  } else if (type === "item" || type === "audio-log") {
+    audio.pickup();
+    audio.ui();
+  } else if (type === "puzzle") {
+    audio.puzzleOk();
+  } else if (type === "puzzle-fail") {
+    audio.puzzleFail();
+    engine.effects.trigger("shake", 0.4, 0.6);
+  } else if (type === "power" || type === "exit") {
+    audio.power();
+  } else if (type === "shock") {
+    audio.shock();
+    engine.effects.trigger("shake", 0.8, 0.8);
+    haptic(0, [25, 30, 40]);
+  } else if (type === "locked") {
+    audio.locked();
+  } else if (type === "phone-ring") {
+    audio.phone();
+  } else if (type === "vending-noise") {
+    audio.vending();
+  } else if (type === "fake-message" || type === "hint" || type === "keypad" || type === "secret") {
+    audio.ui();
+    if (type === "fake-message") {
+      audio.radio();
+      engine.effects.trigger("heartbeat", 1.5, 0.7);
+    }
   }
 }

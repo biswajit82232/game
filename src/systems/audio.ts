@@ -101,10 +101,72 @@ export class AudioManager {
 
   door(): void {
     this.tone(140, 0.4, "sawtooth", 0.05);
+    this.noise(0.12, 0.03);
   }
 
   ui(): void {
     this.tone(420, 0.08, "square", 0.03);
+  }
+
+  pickup(): void {
+    this.tone(520, 0.1, "triangle", 0.05);
+    this.tone(780, 0.14, "sine", 0.04);
+  }
+
+  puzzleOk(): void {
+    this.tone(360, 0.12, "square", 0.05);
+    this.tone(540, 0.18, "triangle", 0.06);
+    this.tone(720, 0.22, "sine", 0.04);
+  }
+
+  puzzleFail(): void {
+    this.tone(180, 0.25, "sawtooth", 0.07);
+    this.tone(110, 0.35, "square", 0.05);
+    this.noise(0.2, 0.05);
+  }
+
+  power(): void {
+    this.tone(55, 0.5, "sawtooth", 0.08);
+    this.tone(110, 0.4, "triangle", 0.05);
+    this.noise(0.35, 0.04);
+  }
+
+  shock(): void {
+    this.noise(0.28, 0.12);
+    this.tone(880, 0.15, "square", 0.08);
+    this.tone(60, 0.4, "sawtooth", 0.1);
+  }
+
+  flashlight(on: boolean): void {
+    if (on) {
+      this.tone(240, 0.06, "square", 0.03);
+      this.noise(0.04, 0.02);
+    } else {
+      this.tone(90, 0.08, "triangle", 0.025);
+    }
+  }
+
+  modeSwitch(): void {
+    this.noise(0.12, 0.035);
+    this.tone(280, 0.1, "square", 0.04);
+    this.tone(190, 0.16, "sawtooth", 0.03);
+  }
+
+  locked(): void {
+    this.tone(95, 0.12, "square", 0.04);
+    this.tone(70, 0.18, "triangle", 0.03);
+  }
+
+  phone(): void {
+    this.tone(640, 0.12, "sine", 0.05);
+    setTimeout(() => this.tone(640, 0.12, "sine", 0.05), 220);
+    setTimeout(() => this.tone(640, 0.12, "sine", 0.04), 440);
+  }
+
+  vending(): void {
+    this.tone(200, 0.08, "square", 0.04);
+    this.noise(0.2, 0.06);
+    this.tone(140, 0.25, "triangle", 0.05);
   }
 
   scare(): void {

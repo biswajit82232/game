@@ -70,12 +70,14 @@ describe("GameSession", () => {
     }
   });
 
-  it("solo mode includes watcher puzzle assist for the walker", () => {
+  it("solo mode hides keypad solution until Eli tells it", () => {
     const session = new GameSession(true);
     const snap = session.snapshotFor("walker");
     expect(snap.solo).toBe(true);
-    expect(snap.symbolSolution).toHaveLength(4);
+    expect(snap.symbolSolution).toBeNull();
     expect(snap.powerSafeSwitch).toBeGreaterThanOrEqual(0);
+    (session as unknown as { eliToldSymbols: boolean }).eliToldSymbols = true;
+    expect(session.snapshotFor("walker").symbolSolution).toHaveLength(4);
   });
 
   it("does not allow flashlight when battery is empty", () => {

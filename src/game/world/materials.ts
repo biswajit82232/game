@@ -291,8 +291,8 @@ export interface WorldMats {
 
 export function createWorldMats(quality: "low" | "high", anisotropy: number, mobile: boolean): WorldMats {
   const high = quality === "high";
-  const size = high ? (mobile ? 384 : 768) : 160;
-  const bumpSize = high ? (mobile ? 256 : 512) : 96;
+  const size = high ? (mobile ? 320 : 512) : 160;
+  const bumpSize = high ? (mobile ? 192 : 384) : 96;
   const env = indoorEnv();
   const plasterMap = canvasTex(size, paintPlaster, anisotropy, 1, 1);
   const vinylMap = canvasTex(size, paintVinyl, anisotropy, 1, 1);

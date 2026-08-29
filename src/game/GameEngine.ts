@@ -60,11 +60,21 @@ export class GameEngine {
   private hidden = false;
   private fogWalker = new THREE.FogExp2(0x10141c, 0.011);
   private fogWatcher = new THREE.FogExp2(0x0a1210, 0.015);
+  private bgWalker = new THREE.Color(0x0e1016);
+  private bgSpirit = new THREE.Color(0x0c1c12);
+  private bgEcho = new THREE.Color(0x140c1c);
+  private bgDanger = new THREE.Color(0x1c1008);
+  private bgNormal = new THREE.Color(0x0a1410);
+  private fogSpirit = new THREE.Color(0x14281c);
+  private fogEcho = new THREE.Color(0x1c1028);
+  private fogDanger = new THREE.Color(0x28180c);
+  private fogNormal = new THREE.Color(0x0c1812);
   private placed = false;
   private jumpscareT = 0;
   private baseFov: number;
   private bob = 0;
   private camRoll = 0;
+  private mobileGfx = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -73,6 +83,7 @@ export class GameEngine {
     private callbacks: EngineCallbacks,
   ) {
     const gfx = gfxProfile(settings);
+    this.mobileGfx = gfx.mobile;
     this.dpr = Math.min(window.devicePixelRatio || 1, gfx.dprCap);
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -143,18 +154,18 @@ export class GameEngine {
     this.flashFill.position.set(0.05, -0.02, 0.25);
     this.camera.add(this.flashFill);
     this.flashCone = new THREE.Mesh(
-      new THREE.ConeGeometry(0.95, 6.5, gfx.mobile ? 14 : 24, 1, true),
+      new THREE.ConeGeometry(0.95, 6.5, gfx.mobile ? 10 : 24, 1, true),
       new THREE.MeshBasicMaterial({
         color: 0xffe6c8,
         transparent: true,
-        opacity: gfx.mobile ? 0.022 : 0.035,
+        opacity: gfx.mobile ? 0 : 0.035,
         depthWrite: false,
         side: THREE.DoubleSide,
       }),
     );
     this.flashCone.rotation.x = Math.PI / 2;
     this.flashCone.position.set(0, -0.06, -3.2);
-    this.flashCone.visible = role === "walker";
+    this.flashCone.visible = role === "walker" && !gfx.mobile;
     this.camera.add(this.flashCone);
     this.scene.add(this.camera);
 
@@ -352,8 +363,8 @@ export class GameEngine {
     const battery = snap?.walker.battery ?? 100;
     const beam = flashlightOn && battery > 0 ? this.flicker : 0;
     this.flashlight.intensity = beam ? 155 * beam : 0;
-    this.flashFill.intensity = beam ? 14 * beam : 0;
-    this.flashCone.visible = beam > 0;
+    this.flashFill.intensity = beam ? (this.mobileGfx ? 10 : 14) * beam : 0;
+    this.flashCone.visible = !this.mobileGfx && beam > 0;
     this.ambient.intensity = this.role === "watcher" ? 0.38 : flashlightOn && battery > 8 ? 0.16 : 0.08;
     this.hemi.intensity = this.role === "watcher" ? 0.48 : flashlightOn && battery > 8 ? 0.3 : 0.16;
     this.flashlight.target.updateMatrixWorld();
@@ -361,27 +372,28 @@ export class GameEngine {
     if (this.role === "walker") {
       this.renderer.toneMappingExposure = 1.05;
       this.scene.fog = this.fogWalker;
+      this.scene.background = this.bgWalker;
     } else {
       if (this.mode === "spirit") {
         this.renderer.toneMappingExposure = 1.15;
-        this.fogWatcher.color.setHex(0x14281c);
+        this.fogWatcher.color.copy(this.fogSpirit);
         this.fogWatcher.density = 0.016;
-        this.scene.background = new THREE.Color(0x0c1c12);
+        this.scene.background = this.bgSpirit;
       } else if (this.mode === "echo") {
         this.renderer.toneMappingExposure = 1.08;
-        this.fogWatcher.color.setHex(0x1c1028);
+        this.fogWatcher.color.copy(this.fogEcho);
         this.fogWatcher.density = 0.018;
-        this.scene.background = new THREE.Color(0x140c1c);
+        this.scene.background = this.bgEcho;
       } else if (this.mode === "danger") {
         this.renderer.toneMappingExposure = 1.12;
-        this.fogWatcher.color.setHex(0x28180c);
+        this.fogWatcher.color.copy(this.fogDanger);
         this.fogWatcher.density = 0.016;
-        this.scene.background = new THREE.Color(0x1c1008);
+        this.scene.background = this.bgDanger;
       } else {
         this.renderer.toneMappingExposure = 0.95;
-        this.fogWatcher.color.setHex(0x0c1812);
+        this.fogWatcher.color.copy(this.fogNormal);
         this.fogWatcher.density = 0.022;
-        this.scene.background = new THREE.Color(0x0a1410);
+        this.scene.background = this.bgNormal;
       }
       this.scene.fog = this.fogWatcher;
     }
@@ -466,6 +478,7 @@ export class GameEngine {
 
     if ((this.controller.consume("KeyF") || this.controller.consumeTap("flashlight")) && this.role === "walker") {
       const next = !(snap?.walker.flashlightOn ?? true);
+      getAudio().flashlight(next);
       this.callbacks.sendFlashlight(next);
     }
     if (
