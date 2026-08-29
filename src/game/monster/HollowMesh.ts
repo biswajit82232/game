@@ -102,7 +102,13 @@ export function createHollow(): THREE.Group {
   return g;
 }
 
-export function animateHollow(mesh: THREE.Group, time: number, hunting = false, jumpscare = false): void {
+export function animateHollow(
+  mesh: THREE.Group,
+  time: number,
+  hunting = false,
+  jumpscare = false,
+  echo = false,
+): void {
   const scare = jumpscare;
   const shake = scare ? 0.2 : hunting ? 0.1 : 0.035;
   mesh.rotation.z = Math.sin(time * (scare ? 20 : hunting ? 7 : 1.2)) * shake;
@@ -125,8 +131,8 @@ export function animateHollow(mesh: THREE.Group, time: number, hunting = false, 
 
   const aura = mesh.userData.aura as THREE.PointLight;
   const eyeGlow = mesh.userData.eyeGlow as THREE.PointLight;
-  if (aura) aura.intensity = scare ? 6 : hunting ? 3.8 + Math.sin(time * 10) * 0.8 : 2.2;
-  if (eyeGlow) eyeGlow.intensity = scare ? 5 : hunting ? 3.2 : 1.8;
+  if (aura) aura.intensity = echo ? 0.6 : scare ? 6 : hunting ? 3.8 + Math.sin(time * 10) * 0.8 : 2.2;
+  if (eyeGlow) eyeGlow.intensity = echo ? 0.8 : scare ? 5 : hunting ? 3.2 : 1.8;
 
   const handL = mesh.userData.handL as THREE.Mesh;
   const handR = mesh.userData.handR as THREE.Mesh;
@@ -140,7 +146,7 @@ export function animateHollow(mesh: THREE.Group, time: number, hunting = false, 
   const body = mesh.userData.body as THREE.Mesh;
   if (body) {
     const mat = body.material as THREE.MeshStandardMaterial;
-    mat.opacity = scare ? 0.92 : hunting ? 0.8 : 0.68;
-    mat.emissiveIntensity = scare ? 1.2 : hunting ? 0.85 : 0.55;
+    mat.opacity = echo ? 0.28 : scare ? 0.92 : hunting ? 0.8 : 0.68;
+    mat.emissiveIntensity = echo ? 0.25 : scare ? 1.2 : hunting ? 0.85 : 0.55;
   }
 }

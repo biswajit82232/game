@@ -252,11 +252,18 @@ io.on("connection", (socket) => {
     if (session.bothIntroDone()) rooms.markPlaying(found.room);
   });
 
+  function partnersConnected(room: NonNullable<ReturnType<RoomManager["getRoom"]>>): boolean {
+    const humans = room.players.filter((p) => !p.isBot);
+    return humans.length > 0 && humans.every((p) => p.connected);
+  }
+
   function gameplayReady(socketId: string): { session: GameSession; role: "walker" | "watcher" } | null {
     const found = rooms.getPlayer(socketId);
     const session = found ? sessions.get(found.room.code) : undefined;
     if (!found || !session || found.room.phase === "lobby") return null;
     if (!session.bothIntroDone()) return null;
+    // Freeze inputs while a co-op partner is reconnecting (tick already pauses).
+    if (!partnersConnected(found.room)) return null;
     return { session, role: found.player.role };
   }
 

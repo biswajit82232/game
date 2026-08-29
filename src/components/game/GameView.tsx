@@ -14,6 +14,7 @@ import { DisconnectOverlay } from "../hud/DisconnectOverlay";
 import { KeypadModal } from "../hud/KeypadModal";
 import { SettingsPanel } from "../menu/SettingsPanel";
 import { TouchControls } from "../hud/TouchControls";
+import { HorrorButton } from "../../ui/HorrorButton";
 
 export function GameView({
   role,
@@ -51,8 +52,14 @@ export function GameView({
     !foundScare && (snapshot?.monster?.ai === "hunting" || snapshot?.monster?.ai === "attack");
 
   useEffect(() => {
-    if (engineRef.current) engineRef.current.paused = paused || keypad || Boolean(note);
-  }, [paused, keypad, note]);
+    if (engineRef.current) {
+      engineRef.current.paused = paused || keypad || Boolean(note) || Boolean(disconnected);
+    }
+  }, [paused, keypad, note, disconnected]);
+
+  useEffect(() => {
+    if (!disconnected) setWaiting(false);
+  }, [disconnected]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -336,7 +343,17 @@ export function GameView({
         />
       )}
       {disconnected && waiting && (
-        <div className="prompt">WAITING FOR PARTNER… MATCH PAUSED</div>
+        <div className="overlay-card">
+          <div className="panel">
+            <h2>WAITING FOR PARTNER…</h2>
+            <p className="muted">Match paused until they rejoin with the same room code.</p>
+            <div className="row">
+              <HorrorButton variant="ghost" onClick={onLobby}>
+                RETURN TO LOBBY
+              </HorrorButton>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
